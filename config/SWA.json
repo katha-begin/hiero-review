@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "project_name": "SWA",
+  "project_root": "V:/SWA",
+  "media_paths": {
+    "import_dir": "V:/SWA/all/scene",
+    "export_dir": "V:/SWA/all/output",
+    "audio_dir": "V:/SWA/all/scene/{ep}/Media/sound"
+  },
+  "structure": {
+    "scene_path": "{project_root}/all/scene",
+    "episode_pattern": "{scene_path}/{ep}",
+    "sequence_pattern": "{episode}/{seq}",
+    "shot_pattern": "{sequence}/{shot}",
+    "dept_output_pattern": "{shot}/{dept}/output",
+    "dept_version_pattern": "{shot}/{dept}/version/{version}"
+  },
+  "settings": {
+    "fps": 25.0,
+    "resolution": [1920, 1080],
+    "color_space": "ACES",
+    "default_department": "comp",
+    "default_media_type": "mov"
+  },
+  "naming": {
+    "episode_regex": "Ep\\d{2}",
+    "sequence_regex": "sq\\d{4}",
+    "shot_regex": "SH\\d{4}",
+    "version_regex": "v\\d{3,4}"
+  },
+  "cache": {
+    "enabled": true,
+    "memory_ttl_seconds": 60,
+    "disk_ttl_seconds": 3600,
+    "disk_path": "~/.nuke/cache/hiero_review"
+  }
+}
+

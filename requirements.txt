@@ -1,0 +1,15 @@
+# Hiero Review Tool - Dependencies
+# =================================
+# Note: PySide2 and hiero modules are provided by Nuke/Hiero installation
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Type checking (development)
+mypy>=1.0.0
+
+# Code formatting (development)
+black>=23.0.0
+isort>=5.12.0
+
