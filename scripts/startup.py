@@ -66,50 +66,41 @@ def register_review_tool() -> None:
     """Register the review tool in Hiero's menu bar."""
     if not HIERO_AVAILABLE:
         return
-    
+
     try:
-        # Import the review tool UI (will be implemented later)
-        # from hiero_review_tool import ReviewToolUI
-        
-        # Get the menu bar
-        menu_bar = hiero.ui.menuBar()
-        
-        # Create or get Pipeline menu
-        pipeline_menu = None
-        for action in menu_bar.actions():
-            if action.text() == "Pipeline":
-                pipeline_menu = action.menu()
-                break
-        
-        if pipeline_menu is None:
-            pipeline_menu = menu_bar.addMenu("Pipeline")
-        
-        # Add Shot Review Tool action
-        review_action = pipeline_menu.addAction("Shot Review Tool")
-        review_action.setShortcut("Ctrl+Shift+R")
-        
-        def show_review_tool():
-            """Show the review tool dialog."""
-            try:
-                from hiero_review_tool.ui import ReviewToolDialog
-                dialog = ReviewToolDialog()
-                dialog.show()
-            except ImportError:
-                print("[HieroReview] Review tool not yet implemented")
-                # Show a placeholder message
-                from PySide2 import QtWidgets
-                QtWidgets.QMessageBox.information(
-                    None,
-                    "Shot Review Tool",
-                    "Review tool will be available after full implementation."
-                )
-        
-        review_action.triggered.connect(show_review_tool)
-        
-        print("[HieroReview] Menu registered: Pipeline > Shot Review Tool (Ctrl+Shift+R)")
-        
+        # Import and register the review tool
+        from src.ui import register_menu, show_review_tool_dialog
+
+        if register_menu():
+            print("[HieroReview] Menu registered: Pipeline > Shot Review Tool (Ctrl+Shift+R)")
+        else:
+            # Fallback: manual menu registration
+            from PySide2.QtWidgets import QAction
+
+            menu_bar = hiero.ui.mainWindow().menuBar()
+
+            # Find or create Pipeline menu
+            pipeline_menu = None
+            for action in menu_bar.actions():
+                if action.text() == "Pipeline":
+                    pipeline_menu = action.menu()
+                    break
+
+            if pipeline_menu is None:
+                pipeline_menu = menu_bar.addMenu("Pipeline")
+
+            # Add Shot Review Tool action
+            review_action = QAction("Shot Review Tool...", None)
+            review_action.setShortcut("Ctrl+Shift+R")
+            review_action.triggered.connect(show_review_tool_dialog)
+            pipeline_menu.addAction(review_action)
+
+            print("[HieroReview] Menu registered (fallback): Pipeline > Shot Review Tool")
+
     except Exception as e:
         print(f"[HieroReview] Failed to register menu: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def main():
