@@ -56,21 +56,35 @@ def setup_environment(config: dict) -> None:
     """Set environment variables from project config."""
     os.environ['HIERO_PROJECT_NAME'] = config.get('project_name', 'Untitled')
     os.environ['HIERO_PROJECT_ROOT'] = config.get('project_root', '')
-    
+
     media_paths = config.get('media_paths', {})
     os.environ['HIERO_IMPORT_DIR'] = media_paths.get('import_dir', '')
     os.environ['HIERO_EXPORT_DIR'] = media_paths.get('export_dir', '')
     os.environ['HIERO_AUDIO_DIR'] = media_paths.get('audio_dir', '')
-    
+
     settings = config.get('settings', {})
     os.environ['HIERO_FPS'] = str(settings.get('fps', 24.0))
     os.environ['HIERO_RESOLUTION'] = json.dumps(settings.get('resolution', [1920, 1080]))
     os.environ['HIERO_COLOR_SPACE'] = settings.get('color_space', 'ACES')
-    
-    # Set plugin path for Hiero to find our tools
-    scripts_dir = Path(__file__).parent
-    plugins_dir = scripts_dir.parent / 'plugins'
-    os.environ['HIERO_PLUGIN_PATH'] = str(plugins_dir)
+
+    # Set NUKE_PATH for Hiero to find our tools (HIERO_PLUGIN_PATH is deprecated)
+    # Add our tool's Python/Startup folder to NUKE_PATH
+    tool_root = Path(__file__).parent.parent
+    startup_path = tool_root / 'Python' / 'Startup'
+
+    # Get existing NUKE_PATH and append our paths
+    existing_path = os.environ.get('NUKE_PATH', '')
+    paths_to_add = [str(tool_root), str(startup_path)]
+
+    if existing_path:
+        new_path = os.pathsep.join([existing_path] + paths_to_add)
+    else:
+        new_path = os.pathsep.join(paths_to_add)
+
+    os.environ['NUKE_PATH'] = new_path
+    os.environ['HIERO_REVIEW_PATH'] = str(tool_root)  # Custom var for our tool
+
+    print(f"NUKE_PATH set to: {new_path}")
 
 
 def get_nuke_executable() -> str:
@@ -119,17 +133,16 @@ def get_nuke_executable() -> str:
 
 
 def launch_hiero(config: dict, mode: str = 'hiero') -> None:
-    """Launch Hiero (via Nuke --hiero) with the startup script."""
+    """Launch Hiero (via Nuke --hiero).
+
+    Note: Hiero loads Python scripts automatically from NUKE_PATH directories.
+    Scripts in Python/Startup/ folders (init.py, menu.py) are auto-loaded.
+    """
     nuke_exe = get_nuke_executable()
-    startup_script = Path(__file__).parent / 'startup.py'
 
-    # Build command: Nuke16.0.exe --hiero [--python startup.py]
+    # Build command: Nuke16.0.exe --hiero
+    # No --python flag needed - Hiero auto-loads from NUKE_PATH
     cmd = [nuke_exe, f'--{mode}']
-
-    if startup_script.exists():
-        cmd.extend(['--python', str(startup_script)])
-    else:
-        print(f"Warning: Startup script not found at {startup_script}")
 
     print(f"Launching Hiero: {' '.join(cmd)}")
     subprocess.Popen(cmd)
