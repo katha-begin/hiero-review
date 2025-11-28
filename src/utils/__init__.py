@@ -31,6 +31,43 @@ from .validators import (
     validate_audio_match,
 )
 
+from .logger import (
+    get_logger,
+    setup_logging,
+    LogContext,
+    log_operation,
+    log_error,
+    log_warning,
+    log_info,
+    log_debug,
+)
+
+from .profiler import (
+    Profiler,
+    ProfileResult,
+    profile,
+    profile_block,
+    get_profiler,
+    print_profile_summary,
+)
+
+from .errors import (
+    HieroReviewError,
+    ConfigurationError,
+    ProjectNotFoundError,
+    MediaNotFoundError,
+    VersionNotFoundError,
+    InvalidPathError,
+    ScanError,
+    TimelineBuildError,
+    HieroAPIError,
+    CacheError,
+    ValidationError,
+    handle_error,
+    safe_operation,
+    ErrorCollector,
+)
+
 __all__ = [
     # Path parser
     'normalize_path',
@@ -56,5 +93,36 @@ __all__ = [
     'validate_frame_sequence',
     'validate_project_structure',
     'validate_audio_match',
+    # Logger
+    'get_logger',
+    'setup_logging',
+    'LogContext',
+    'log_operation',
+    'log_error',
+    'log_warning',
+    'log_info',
+    'log_debug',
+    # Profiler
+    'Profiler',
+    'ProfileResult',
+    'profile',
+    'profile_block',
+    'get_profiler',
+    'print_profile_summary',
+    # Errors
+    'HieroReviewError',
+    'ConfigurationError',
+    'ProjectNotFoundError',
+    'MediaNotFoundError',
+    'VersionNotFoundError',
+    'InvalidPathError',
+    'ScanError',
+    'TimelineBuildError',
+    'HieroAPIError',
+    'CacheError',
+    'ValidationError',
+    'handle_error',
+    'safe_operation',
+    'ErrorCollector',
 ]
 
