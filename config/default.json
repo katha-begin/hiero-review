@@ -33,6 +33,12 @@
     "memory_ttl_seconds": 60,
     "disk_ttl_seconds": 3600,
     "disk_path": "~/.nuke/cache/hiero_review"
+  },
+  "launcher": {
+    "nuke_executable": "C:/Program Files/Nuke16.0v4/Nuke16.0.exe",
+    "extra_nuke_paths": [],
+    "extra_python_paths": [],
+    "environment": {}
   }
 }
 
