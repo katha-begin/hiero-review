@@ -146,16 +146,21 @@ class TimelineBuilder:
         clips_data = []  # (shot_name, clip_path, duration)
         
         self._report_progress(f"Building timeline: {config.name}")
-        
+
+        # Log scanner root
+        self._report_progress(f"Scanner root: {self._scanner._project_root}")
+
         # Collect shots from all sequences
         all_shots = []
         for seq in config.sequences:
+            self._report_progress(f"Scanning sequence: {config.episode}/{seq}")
             shots = self._scanner.scan_shots(config.episode, seq)
+            self._report_progress(f"  Found {len(shots)} shots: {shots}")
             for shot in shots:
                 all_shots.append((config.episode, seq, shot))
-        
+
         total_shots = len(all_shots)
-        self._report_progress(f"Found {total_shots} shots", 0, total_shots)
+        self._report_progress(f"Total shots found: {total_shots}", 0, total_shots)
         
         # Process each shot
         for i, (ep, seq, shot) in enumerate(all_shots):
