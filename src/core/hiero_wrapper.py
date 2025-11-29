@@ -194,13 +194,52 @@ class HieroClip:
 
 class HieroTrackItem:
     """Wrapper for Hiero track item operations."""
-    
+
     @staticmethod
     def add_item_to_track(track: Any, clip: Any, timeline_in: int, timeline_out: int) -> Any:
-        """Add a clip to track at specified position."""
+        """
+        Add a clip to track at specified position.
+
+        Per Hiero API:
+        1. Create TrackItem with name and type
+        2. Set source clip
+        3. Set timeline in/out points
+        4. Add to track
+        """
         if not HIERO_AVAILABLE:
             return MockTrackItem(clip, timeline_in, timeline_out)
-        return track.addItem(clip, timeline_in)
+
+        # Get clip name for track item
+        clip_name = "clip"
+        try:
+            if hasattr(clip, 'name'):
+                clip_name = clip.name()
+            elif hasattr(clip, 'mediaSource'):
+                source = clip.mediaSource()
+                if source:
+                    clip_name = source.filename().split('/')[-1].split('\\')[-1]
+        except:
+            pass
+
+        # Determine track type (video or audio)
+        track_type = hiero.core.TrackItem.kVideo
+        if hasattr(track, 'isAudioTrack') and track.isAudioTrack():
+            track_type = hiero.core.TrackItem.kAudio
+
+        # Create track item
+        track_item = hiero.core.TrackItem(clip_name, track_type)
+
+        # Set source clip
+        track_item.setSource(clip)
+
+        # Set timeline position
+        track_item.setTimelineIn(timeline_in)
+        track_item.setTimelineOut(timeline_out)
+
+        # Add to track
+        track.addItem(track_item)
+
+        return track_item
     
     @staticmethod
     def update_item_source(item: Any, new_clip: Any) -> bool:
