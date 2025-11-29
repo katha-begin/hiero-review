@@ -1,93 +1,54 @@
 """
-Hiero Review Tool - Auto Startup Script
-========================================
+Hiero Review Tool - Auto Startup Script (Python/Startup/init.py)
+=================================================================
 This script is automatically loaded by Hiero from the Startup folder.
-Place this folder in your ~/.nuke/Python/ directory.
-
-Structure:
-~/.nuke/Python/Startup/init.py  (this file)
-~/.nuke/Python/hiero_review/    (the tool source)
+NOTE: The main init.py is at the tool root. This one is a fallback.
 """
 import sys
 import os
 from pathlib import Path
 
-print("[HieroReview] ========================================")
-print("[HieroReview] Initializing Hiero Review Tool...")
-print("[HieroReview] ========================================")
+print("[HieroReview/Startup] ========================================")
+print("[HieroReview/Startup] Initializing from Python/Startup/init.py")
+print("[HieroReview/Startup] ========================================")
 
-# Find the hiero_review source directory
-# It should be in the same Python folder or in HIERO_PLUGIN_PATH
-possible_paths = [
-    Path(__file__).parent.parent / "hiero_review" / "src",  # ~/.nuke/Python/hiero_review/src
-    Path(__file__).parent.parent.parent / "src",            # Relative to project root
-    Path(os.environ.get("HIERO_REVIEW_PATH", "")) / "src",  # From environment variable
-]
+# The tool root is two levels up from Python/Startup/
+TOOL_ROOT = Path(__file__).parent.parent.parent.resolve()
+print(f"[HieroReview/Startup] Tool root: {TOOL_ROOT}")
 
-# Also check HIERO_PLUGIN_PATH
-plugin_path = os.environ.get("HIERO_PLUGIN_PATH", "")
-if plugin_path:
-    for p in plugin_path.split(os.pathsep):
-        possible_paths.append(Path(p) / "src")
-        possible_paths.append(Path(p))
+# Add tool root to Python path
+if str(TOOL_ROOT) not in sys.path:
+    sys.path.insert(0, str(TOOL_ROOT))
+    print(f"[HieroReview/Startup] Added to sys.path: {TOOL_ROOT}")
 
-# Find valid source path
-src_path = None
-for path in possible_paths:
-    if path.exists() and (path / "ui").exists():
-        src_path = path.parent  # We want parent so 'from src.ui import' works
-        break
+# Set environment variable
+os.environ['HIERO_REVIEW_PATH'] = str(TOOL_ROOT)
 
-if src_path:
-    # Add to Python path
-    src_path_str = str(src_path)
-    if src_path_str not in sys.path:
-        sys.path.insert(0, src_path_str)
-    print(f"[HieroReview] Added to path: {src_path_str}")
-else:
-    print("[HieroReview] Warning: Could not find hiero_review source directory")
-    print("[HieroReview] Set HIERO_REVIEW_PATH environment variable to the tool location")
-
-# Try to register the menu
+# Now import and run the main menu.py from tool root
 try:
-    import hiero.core
-    import hiero.ui
-    
-    def on_startup():
-        """Called when Hiero UI is ready."""
-        try:
-            from src.ui import register_menu, register_context_menu
-            
-            if register_menu():
-                print("[HieroReview] Menu registered successfully")
-            else:
-                print("[HieroReview] Menu registration returned False")
-            
-            # Register context menu
-            register_context_menu()
-            print("[HieroReview] Context menu registered")
-            
-        except ImportError as e:
-            print(f"[HieroReview] Import error: {e}")
-        except Exception as e:
-            print(f"[HieroReview] Error during registration: {e}")
-    
-    # Register for startup event
-    hiero.core.events.registerInterest(
-        hiero.core.events.EventType.kAfterNewProjectCreated,
-        lambda event: on_startup()
-    )
-    
-    # Also try immediate registration (in case project already exists)
+    # Import the root menu.py which handles everything
+    import menu
+    print("[HieroReview/Startup] Loaded root menu.py")
+except ImportError as e:
+    print(f"[HieroReview/Startup] Could not import root menu.py: {e}")
+    # Fallback: try to register directly
     try:
-        on_startup()
-    except:
-        pass
-    
-    print("[HieroReview] Startup script loaded")
-    
-except ImportError:
-    print("[HieroReview] Running outside Hiero - skipping menu registration")
+        import hiero.core
+        import hiero.ui
+        from src.ui import register_menu, register_context_menu
 
-print("[HieroReview] ========================================")
+        def on_startup():
+            if register_menu():
+                print("[HieroReview/Startup] Menu registered")
+            register_context_menu()
+
+        hiero.core.events.registerInterest(
+            hiero.core.events.EventType.kAfterNewProjectCreated,
+            lambda event: on_startup()
+        )
+        on_startup()
+    except Exception as e2:
+        print(f"[HieroReview/Startup] Fallback registration failed: {e2}")
+
+print("[HieroReview/Startup] ========================================")
 
