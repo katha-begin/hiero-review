@@ -60,9 +60,6 @@ class ReviewToolController(QObject):
     
     def _connect_signals(self) -> None:
         """Connect dialog signals to controller slots."""
-        # Project config changed
-        self.dialog.project_combo.currentTextChanged.connect(self._on_project_changed)
-
         # Refresh projects button
         self.dialog.refresh_projects_btn.clicked.connect(self._load_projects)
 
@@ -82,11 +79,20 @@ class ReviewToolController(QObject):
 
         # Build button
         self.dialog.build_requested.connect(self._on_build_timeline)
-    
+
+        # Project config changed - connect AFTER other signals
+        # so the UI is ready when project changes
+        self.dialog.project_combo.currentTextChanged.connect(self._on_project_changed)
+
     def _initialize(self) -> None:
         """Initialize the controller and load initial data."""
         self.dialog.log_message("Initializing Review Tool...", "info")
         self._load_projects()
+
+        # Trigger initial project load if a project is selected
+        current_project = self.dialog.project_combo.currentText()
+        if current_project:
+            self._on_project_changed(current_project)
     
     def _load_projects(self) -> None:
         """Load available project configurations from multiple locations."""
@@ -98,6 +104,7 @@ class ReviewToolController(QObject):
 
             # 1. Load from tool's local config folder
             tool_config_dir = get_tool_root() / "config"
+            self.dialog.log_message(f"Checking tool config: {tool_config_dir}", "info")
             if tool_config_dir.exists():
                 for config_file in tool_config_dir.glob("*.json"):
                     try:
@@ -106,9 +113,11 @@ class ReviewToolController(QObject):
                         name = config_file.stem
                         self._project_configs[name] = data
                         projects.append(name)
-                        self.dialog.log_message(f"  Loaded: {name} (from tool config)", "info")
+                        self.dialog.log_message(f"  Loaded: {name}", "info")
                     except Exception as e:
                         self.dialog.log_message(f"  Error loading {config_file.name}: {e}", "warning")
+            else:
+                self.dialog.log_message(f"  Config dir not found: {tool_config_dir}", "warning")
 
             # 2. Load from ~/.nuke/hiero_review_projects/
             user_config_dir = get_config_dir()
@@ -121,7 +130,7 @@ class ReviewToolController(QObject):
                                 data = json.load(f)
                             self._project_configs[name] = data
                             projects.append(name)
-                            self.dialog.log_message(f"  Loaded: {name} (from user config)", "info")
+                            self.dialog.log_message(f"  Loaded: {name} (user)", "info")
                     except Exception as e:
                         self.dialog.log_message(f"  Error loading {config_file.name}: {e}", "warning")
 
@@ -129,14 +138,18 @@ class ReviewToolController(QObject):
                 projects = ["default"]
                 self.dialog.log_message("No project configs found", "warning")
 
+            # Block signals while setting projects to avoid triggering _on_project_changed
+            self.dialog.project_combo.blockSignals(True)
             self.dialog.set_projects(sorted(projects))
-            self.dialog.log_message(f"Loaded {len(projects)} project(s)", "info")
 
-            # Load last used project
-            last_project = self.config_manager.get("last_project", "default")
+            # Select last used project or first one
+            last_project = self.config_manager.get("last_project", "")
             index = self.dialog.project_combo.findText(last_project)
             if index >= 0:
                 self.dialog.project_combo.setCurrentIndex(index)
+
+            self.dialog.project_combo.blockSignals(False)
+            self.dialog.log_message(f"Loaded {len(projects)} project(s)", "info")
 
         except Exception as e:
             self.dialog.log_message(f"Error loading projects: {e}", "error")
