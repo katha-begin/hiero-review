@@ -22,8 +22,29 @@ if str(TOOL_ROOT) not in sys.path:
 try:
     import hiero.core
     import hiero.ui
-    from PySide2.QtWidgets import QAction, QMenu
-    
+
+    # Try to import Qt - Nuke/Hiero may use PySide2 or PySide6
+    try:
+        from PySide2.QtWidgets import QAction, QMenu
+        print("[HieroReview] Using PySide2")
+    except ImportError:
+        try:
+            from PySide6.QtWidgets import QAction, QMenu
+            from PySide6.QtGui import QAction as QAction6
+            # In PySide6, QAction moved to QtGui
+            try:
+                from PySide6.QtGui import QAction
+            except ImportError:
+                pass
+            print("[HieroReview] Using PySide6")
+        except ImportError:
+            # Last resort: try to get Qt from Nuke
+            try:
+                from nukescripts import panels
+                from PySide2.QtWidgets import QAction, QMenu
+            except ImportError:
+                raise ImportError("Could not import PySide2 or PySide6")
+
     print("[HieroReview] Hiero modules imported successfully")
     
     # Global dialog reference to prevent garbage collection
@@ -52,8 +73,11 @@ try:
             print(f"[HieroReview] Import error: {e}")
             import traceback
             traceback.print_exc()
-            
-            from PySide2.QtWidgets import QMessageBox
+
+            try:
+                from PySide2.QtWidgets import QMessageBox
+            except ImportError:
+                from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(
                 hiero.ui.mainWindow(),
                 "Review Tool Error",

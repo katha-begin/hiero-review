@@ -5,7 +5,9 @@ Main Qt-based dialog window for the Hiero Review Tool.
 """
 from typing import Optional, Callable, List
 
-# Try to import PySide2 (Hiero's Qt), fallback to PySide6 for testing
+# Try to import Qt - support both PySide2 (older Hiero) and PySide6 (newer Nuke 16+)
+_QT_AVAILABLE = False
+
 try:
     from PySide2.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -16,6 +18,8 @@ try:
     )
     from PySide2.QtCore import Qt, Signal, QThread
     from PySide2.QtGui import QFont
+    _QT_AVAILABLE = True
+    print("[ReviewToolDialog] Using PySide2")
 except ImportError:
     try:
         from PySide6.QtWidgets import (
@@ -27,12 +31,19 @@ except ImportError:
         )
         from PySide6.QtCore import Qt, Signal, QThread
         from PySide6.QtGui import QFont
+        _QT_AVAILABLE = True
+        print("[ReviewToolDialog] Using PySide6")
     except ImportError:
+        print("[ReviewToolDialog] No Qt available - using stubs")
         # Define minimal stubs for testing without Qt
         class QDialog:
             pass
+        class QWidget:
+            pass
         class Signal:
             def __init__(self, *args): pass
+        class Qt:
+            AlignTop = 0
 
 
 class ReviewToolDialog(QDialog):
