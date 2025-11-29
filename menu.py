@@ -51,24 +51,28 @@ if tool_root_str not in sys.path:
     sys.path.insert(0, tool_root_str)
     print(f"[HieroReview] Added to sys.path: {tool_root_str}")
 
-# Global dialog reference to prevent garbage collection
+# Global references to prevent garbage collection
 _review_dialog = None
+_review_controller = None
 
 
 def show_review_tool():
     """Show the Review Tool dialog."""
-    global _review_dialog
+    global _review_dialog, _review_controller
 
     print("[HieroReview] show_review_tool() called")
 
     try:
         from src.ui import ReviewToolDialog
+        from src.ui.controller import ReviewToolController
         import hiero.ui
 
         if _review_dialog is None:
             parent = hiero.ui.mainWindow()
             _review_dialog = ReviewToolDialog(parent)
-            print("[HieroReview] Created new ReviewToolDialog")
+            # Create controller to wire up the dialog
+            _review_controller = ReviewToolController(_review_dialog)
+            print("[HieroReview] Created ReviewToolDialog with Controller")
 
         _review_dialog.show()
         _review_dialog.raise_()

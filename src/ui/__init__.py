@@ -3,6 +3,7 @@ UI components for Hiero Review Tool.
 """
 
 from .main_dialog import ReviewToolDialog
+from .controller import ReviewToolController
 from .selector_widget import EpisodeSelector, SequenceSelector, ShotSelector
 from .version_widget import VersionControlWidget, VersionInfoWidget, VersionPanel
 from .progress_widget import (
@@ -19,6 +20,7 @@ from .preferences_dialog import PreferencesDialog
 __all__ = [
     # Main dialog
     'ReviewToolDialog',
+    'ReviewToolController',
     # Selectors
     'EpisodeSelector',
     'SequenceSelector',

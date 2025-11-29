@@ -115,8 +115,8 @@ class ReviewToolDialog(QDialog):
         # Root Path
         layout.addWidget(QLabel("Root:"), 1, 0)
         self.root_path_edit = QLineEdit()
-        self.root_path_edit.setPlaceholderText("Project root directory...")
-        self.root_path_edit.setReadOnly(True)
+        self.root_path_edit.setPlaceholderText("Project root directory (e.g., V:/SWA/all/scene)")
+        # Allow editing so user can type path directly
         layout.addWidget(self.root_path_edit, 1, 1)
         
         self.browse_btn = QPushButton("Browse...")
@@ -278,6 +278,7 @@ class ReviewToolDialog(QDialog):
     def _connect_signals(self) -> None:
         """Connect UI signals to slots."""
         self.browse_btn.clicked.connect(self._on_browse)
+        self.root_path_edit.returnPressed.connect(self._on_root_path_enter)
         self.select_all_btn.clicked.connect(self._select_all_sequences)
         self.deselect_all_btn.clicked.connect(self._deselect_all_sequences)
         self.clear_log_btn.clicked.connect(self._clear_log)
@@ -336,6 +337,10 @@ class ReviewToolDialog(QDialog):
         if path:
             self.root_path_edit.setText(path)
             self.log_message(f"Root changed to: {path}")
+
+    def _on_root_path_enter(self) -> None:
+        """Handle Enter key in root path field."""
+        self.log_message(f"Root path entered: {self.root_path_edit.text()}")
 
     def _select_all_sequences(self) -> None:
         """Select all sequences in list."""
