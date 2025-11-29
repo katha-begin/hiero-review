@@ -200,25 +200,47 @@ class TimelineBuilder:
 
         # Create Hiero sequence and tracks
         try:
+            # Create bin for this review session
+            bin_name = f"{config.episode}_Review_Media"
+            self._report_progress(f"Creating bin: {bin_name}")
+
+            # Create sequence
+            self._report_progress(f"Creating sequence: {config.name}")
             sequence = HieroTimeline.create_sequence(config.name, config.fps)
             video_track = HieroTimeline.add_video_track(sequence, "Video")
 
-            # Add clips to track
-            for pos in positions:
-                clip = HieroClip.create_clip(pos.clip_path)
+            # Add audio track if requested
+            audio_track = None
+            if config.include_audio:
+                audio_track = HieroTimeline.add_audio_track(sequence, "Audio")
+
+            # Import clips to bin and add to track
+            self._report_progress(f"Importing {len(positions)} clips to bin and timeline")
+
+            for i, pos in enumerate(positions):
+                self._report_progress(f"Adding clip: {pos.shot_name}", i + 1, len(positions))
+
+                # Create clip and add to bin
+                clip = HieroClip.create_clip(pos.clip_path, add_to_bin=True, bin_name=bin_name)
+
+                # Add to track
                 item = HieroTrackItem.add_item_to_track(
                     video_track, clip, pos.timeline_in, pos.timeline_out
                 )
-                # Add metadata
+
+                # Add metadata tags
                 HieroTrackItem.set_metadata(item, "shot", pos.shot_name)
                 HieroTrackItem.set_metadata(item, "department", config.department)
                 HieroTrackItem.set_metadata(item, "version", config.version)
+                HieroTrackItem.set_metadata(item, "media_path", pos.clip_path)
 
             result.success = True
             result.sequence = sequence
             result.shots_added = len(positions)
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             result.errors.append(f"Failed to create timeline: {str(e)}")
 
         self._report_progress("Timeline build complete", total_shots, total_shots)

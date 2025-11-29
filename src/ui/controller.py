@@ -27,6 +27,7 @@ except ImportError:
 
 from .main_dialog import ReviewToolDialog
 from ..core.file_scanner import ProjectScanner
+from ..core.timeline_builder import TimelineBuilder, TimelineConfig
 from ..config.config_manager import ConfigManager
 from ..config.project_config import list_available_projects, get_config_dir
 
@@ -262,8 +263,86 @@ class ReviewToolController(QObject):
     
     def _on_build_timeline(self, config: dict) -> None:
         """Handle build timeline request."""
-        self.dialog.log_message("Building timeline...", "info")
-        self.dialog.log_message(f"Config: {config}", "info")
-        # TODO: Implement actual timeline building
-        self.dialog.log_message("Timeline building not yet implemented", "warning")
+        from ..core.timeline_builder import TimelineBuilder, TimelineConfig
+        from ..core.hiero_wrapper import HieroProject
+
+        self.dialog.log_message("=" * 50, "info")
+        self.dialog.log_message("Starting Timeline Build", "info")
+        self.dialog.log_message("=" * 50, "info")
+
+        # Validate required fields
+        if not config.get('episode'):
+            self.dialog.log_message("Error: No episode selected", "error")
+            return
+        if not config.get('sequences'):
+            self.dialog.log_message("Error: No sequences selected", "error")
+            return
+        if not self.scanner:
+            self.dialog.log_message("Error: No project scanned - set root path first", "error")
+            return
+
+        self.dialog.set_busy(True)
+
+        try:
+            # Log configuration
+            self.dialog.log_message(f"Episode: {config['episode']}", "info")
+            self.dialog.log_message(f"Sequences: {', '.join(config['sequences'])}", "info")
+            self.dialog.log_message(f"Department: {config['department']}", "info")
+            self.dialog.log_message(f"Version: {config['version']}", "info")
+            self.dialog.log_message(f"Media Type: {config['media_type']}", "info")
+
+            # Get project config for fps
+            project_name = config.get('project', 'default')
+            project_config = self._project_configs.get(project_name, {})
+            fps = project_config.get('settings', {}).get('fps', 24.0)
+
+            # Create timeline name
+            timeline_name = f"{config['episode']}_Review"
+
+            # Build TimelineConfig
+            timeline_config = TimelineConfig(
+                name=timeline_name,
+                episode=config['episode'],
+                sequences=config['sequences'],
+                department=config['department'],
+                version=config['version'],
+                media_type=config['media_type'],
+                fps=fps,
+                include_audio=config.get('include_audio', True)
+            )
+
+            # Create TimelineBuilder with progress callback
+            builder = TimelineBuilder(
+                scanner=self.scanner,
+                progress_callback=self._progress_callback
+            )
+
+            self.dialog.log_message("Scanning shots...", "info")
+
+            # Build the timeline
+            result = builder.build_timeline(timeline_config)
+
+            if result.success:
+                self.dialog.log_message("=" * 50, "info")
+                self.dialog.log_message(f"SUCCESS: Timeline '{timeline_name}' created!", "info")
+                self.dialog.log_message(f"Shots added: {result.shots_added}", "info")
+                if result.shots_skipped:
+                    self.dialog.log_message(f"Shots skipped: {len(result.shots_skipped)}", "warning")
+                    for skip in result.shots_skipped[:5]:  # Show first 5
+                        self.dialog.log_message(f"  - {skip}", "warning")
+                    if len(result.shots_skipped) > 5:
+                        self.dialog.log_message(f"  ... and {len(result.shots_skipped) - 5} more", "warning")
+            else:
+                self.dialog.log_message("=" * 50, "error")
+                self.dialog.log_message("FAILED to build timeline", "error")
+                for error in result.errors:
+                    self.dialog.log_message(f"  - {error}", "error")
+
+        except Exception as e:
+            self.dialog.log_message(f"Error building timeline: {e}", "error")
+            import traceback
+            traceback.print_exc()
+
+        finally:
+            self.dialog.set_busy(False)
 

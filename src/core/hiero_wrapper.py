@@ -105,23 +105,76 @@ class HieroTimeline:
 
 class HieroClip:
     """Wrapper for Hiero clip operations."""
-    
+
     @staticmethod
-    def create_clip(media_path: str) -> Any:
-        """Create a clip from media file."""
+    def create_clip(media_path: str, add_to_bin: bool = True, bin_name: str = None) -> Any:
+        """
+        Create a clip from media file and optionally add to bin.
+
+        Args:
+            media_path: Path to media file (MOV or image sequence pattern)
+            add_to_bin: Whether to add clip to project bin
+            bin_name: Optional bin name (creates if not exists)
+
+        Returns:
+            Clip object
+        """
         if not HIERO_AVAILABLE:
             return MockClip(media_path)
+
+        # Create media source and clip
         source = hiero.core.MediaSource(media_path)
-        return hiero.core.Clip(source)
-    
+        clip = hiero.core.Clip(source)
+
+        # Add to bin if requested
+        if add_to_bin:
+            project = HieroProject.get_active_project()
+            if project:
+                if bin_name:
+                    # Find or create named bin
+                    target_bin = HieroClip._get_or_create_bin(project, bin_name)
+                else:
+                    target_bin = project.clipsBin()
+
+                # Add clip to bin
+                bin_item = hiero.core.BinItem(clip)
+                target_bin.addItem(bin_item)
+
+        return clip
+
     @staticmethod
-    def create_from_sequence(pattern: str, frame_range: Tuple[int, int]) -> Any:
+    def _get_or_create_bin(project: Any, bin_name: str) -> Any:
+        """Find existing bin or create new one."""
+        if not HIERO_AVAILABLE:
+            return MockBin(bin_name)
+
+        clips_bin = project.clipsBin()
+
+        # Search for existing bin
+        for item in clips_bin.items():
+            if hasattr(item, 'name') and item.name() == bin_name:
+                return item
+
+        # Create new bin
+        new_bin = hiero.core.Bin(bin_name)
+        clips_bin.addItem(new_bin)
+        return new_bin
+
+    @staticmethod
+    def create_from_sequence(pattern: str, frame_range: Tuple[int, int], add_to_bin: bool = True) -> Any:
         """Create a clip from image sequence."""
         if not HIERO_AVAILABLE:
             return MockClip(pattern, frame_range)
         # Pattern like: /path/to/file.%04d.exr
         source = hiero.core.MediaSource(pattern)
         clip = hiero.core.Clip(source)
+
+        if add_to_bin:
+            project = HieroProject.get_active_project()
+            if project:
+                bin_item = hiero.core.BinItem(clip)
+                project.clipsBin().addItem(bin_item)
+
         return clip
     
     @staticmethod
