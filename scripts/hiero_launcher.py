@@ -22,8 +22,47 @@ from pathlib import Path
 from typing import Optional
 
 
+def normalize_path(path: Path) -> Path:
+    """Normalize path - convert UNC paths to drive letters on Windows.
+
+    On Windows, converts paths like:
+        \\\\server\\ppr_dev_t\\... -> T:\\...
+        \\\\10.100.131.250\\ppr_dev_t\\... -> T:\\...
+    """
+    if sys.platform != 'win32':
+        return path
+
+    path_str = str(path)
+
+    # Map of UNC share names to drive letters
+    # Add more mappings as needed
+    unc_to_drive = {
+        'ppr_dev_t': 'T:',
+        'ppr_dev_s': 'S:',
+        'ppr_dev_p': 'P:',
+    }
+
+    # Check if it's a UNC path (starts with \\ or //)
+    if path_str.startswith('\\\\') or path_str.startswith('//'):
+        # Split the path: \\server\share\rest\of\path
+        parts = path_str.replace('/', '\\').lstrip('\\').split('\\')
+        if len(parts) >= 2:
+            server = parts[0]
+            share = parts[1].lower()
+            rest = '\\'.join(parts[2:]) if len(parts) > 2 else ''
+
+            # Check if we have a drive mapping for this share
+            if share in unc_to_drive:
+                drive = unc_to_drive[share]
+                new_path = f"{drive}\\{rest}" if rest else drive
+                print(f"[Launcher] Converted UNC path: {path_str} -> {new_path}")
+                return Path(new_path)
+
+    return path
+
+
 # Get tool root directory (parent of scripts folder)
-TOOL_ROOT = Path(__file__).parent.parent.resolve()
+TOOL_ROOT = normalize_path(Path(__file__).parent.parent.resolve())
 
 
 def get_config_dir() -> Path:
