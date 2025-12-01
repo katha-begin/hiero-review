@@ -228,16 +228,25 @@ class TimelineBuilder:
                 # Create clip and add to bin
                 clip = HieroClip.create_clip(pos.clip_path, add_to_bin=True, bin_name=bin_name)
 
-                # Add to track
-                item = HieroTrackItem.add_item_to_track(
+                # Add to VIDEO track
+                video_item = HieroTrackItem.add_item_to_track(
                     video_track, clip, pos.timeline_in, pos.timeline_out
                 )
 
-                # Add metadata tags
-                HieroTrackItem.set_metadata(item, "shot", pos.shot_name)
-                HieroTrackItem.set_metadata(item, "department", config.department)
-                HieroTrackItem.set_metadata(item, "version", config.version)
-                HieroTrackItem.set_metadata(item, "media_path", pos.clip_path)
+                # Add metadata tags to video item
+                HieroTrackItem.set_metadata(video_item, "shot", pos.shot_name)
+                HieroTrackItem.set_metadata(video_item, "department", config.department)
+                HieroTrackItem.set_metadata(video_item, "version", config.version)
+                HieroTrackItem.set_metadata(video_item, "media_path", pos.clip_path)
+
+                # Add to AUDIO track if enabled (MOV files have embedded audio)
+                if audio_track and config.include_audio:
+                    # For MOV with embedded audio, add same clip to audio track
+                    if pos.clip_path.lower().endswith('.mov'):
+                        audio_item = HieroTrackItem.add_item_to_track(
+                            audio_track, clip, pos.timeline_in, pos.timeline_out
+                        )
+                        HieroTrackItem.set_metadata(audio_item, "shot", pos.shot_name)
 
             result.success = True
             result.sequence = sequence
