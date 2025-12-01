@@ -282,17 +282,18 @@ class HieroTrackItem:
     """Wrapper for Hiero track item operations."""
 
     @staticmethod
-    def add_item_to_track(track: Any, clip: Any, timeline_in: int) -> Any:
+    def add_item_to_track(track: Any, clip: Any, timeline_in: int, is_audio: bool = False) -> Any:
         """
         Add a clip to track at specified timeline position, using clip's full duration.
 
-        Uses VideoTrack.addTrackItem(clip, position) or AudioTrack.addTrackItem(clip, channel, position)
-        which automatically handles the clip's duration correctly.
+        For video tracks: Uses VideoTrack.addTrackItem(clip, position) which handles duration correctly.
+        For audio tracks: Creates TrackItem manually since addTrackItem has different requirements.
 
         Args:
             track: VideoTrack or AudioTrack
             clip: Clip to add
             timeline_in: Starting frame position on timeline
+            is_audio: Whether this is for audio track (uses manual method)
         """
         if not HIERO_AVAILABLE:
             return MockTrackItem(clip, timeline_in, timeline_in + 100)
@@ -305,14 +306,21 @@ class HieroTrackItem:
         except:
             pass
 
-        # Use the track's addTrackItem method which handles duration correctly
-        # For AudioTrack: addTrackItem(clip, audioChannel, position)
-        # For VideoTrack: addTrackItem(clip, position)
-        if hasattr(track, 'isAudioTrack') and track.isAudioTrack():
-            # Audio track - use channel 0 for first audio channel
-            track_item = track.addTrackItem(clip, 0, timeline_in)
+        track_item = None
+
+        if is_audio:
+            # Audio track - use manual TrackItem creation
+            # AudioTrack.addTrackItem requires specific audio clip setup
+            track_item = hiero.core.TrackItem(clip_name, hiero.core.TrackItem.kAudio)
+            track_item.setSource(clip)
+            # setSource on unattached TrackItem sets duration from clip
+            # Now set timeline position
+            clip_duration = clip.duration()
+            track_item.setTimelineIn(timeline_in)
+            track_item.setTimelineOut(timeline_in + clip_duration - 1)
+            track.addItem(track_item)
         else:
-            # Video track
+            # Video track - use native addTrackItem which handles duration correctly
             track_item = track.addTrackItem(clip, timeline_in)
 
         # Log the result

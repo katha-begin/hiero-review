@@ -299,7 +299,7 @@ class TimelineBuilder:
                 if audio_track and config.include_audio:
                     if media_path.lower().endswith('.mov'):
                         audio_item = HieroTrackItem.add_item_to_track(
-                            audio_track, clip, current_frame
+                            audio_track, clip, current_frame, is_audio=True
                         )
                         HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
 
@@ -394,7 +394,7 @@ class TimelineBuilder:
                         # Update audio track too
                         if audio_track and config.include_audio and media_path.lower().endswith('.mov'):
                             audio_item = HieroTrackItem.add_item_to_track(
-                                audio_track, clip, timeline_in
+                                audio_track, clip, timeline_in, is_audio=True
                             )
                             HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
 
@@ -428,7 +428,7 @@ class TimelineBuilder:
                     # Add to audio track
                     if audio_track and config.include_audio and media_path.lower().endswith('.mov'):
                         audio_item = HieroTrackItem.add_item_to_track(
-                            audio_track, clip, timeline_in
+                            audio_track, clip, timeline_in, is_audio=True
                         )
                         HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
 
