@@ -292,6 +292,9 @@ class TimelineBuilder:
                 HieroTrackItem.set_metadata(video_item, "version", version)
                 HieroTrackItem.set_metadata(video_item, "media_path", media_path)
 
+                # Get duration from the track item (more accurate than clip)
+                item_duration = HieroTrackItem.get_duration(video_item)
+
                 # Add to AUDIO track if enabled (MOV files have embedded audio)
                 if audio_track and config.include_audio:
                     if media_path.lower().endswith('.mov'):
@@ -300,9 +303,8 @@ class TimelineBuilder:
                         )
                         HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
 
-                # Get actual clip duration and advance timeline position
-                clip_duration = HieroClip.get_duration(clip)
-                current_frame += clip_duration
+                # Advance timeline position using track item duration
+                current_frame += item_duration
                 shots_added += 1
 
             result.success = True
@@ -420,6 +422,9 @@ class TimelineBuilder:
                     HieroTrackItem.set_metadata(video_item, "version", version)
                     HieroTrackItem.set_metadata(video_item, "media_path", media_path)
 
+                    # Get duration from track item
+                    item_duration = HieroTrackItem.get_duration(video_item)
+
                     # Add to audio track
                     if audio_track and config.include_audio and media_path.lower().endswith('.mov'):
                         audio_item = HieroTrackItem.add_item_to_track(
@@ -427,9 +432,8 @@ class TimelineBuilder:
                         )
                         HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
 
-                    # Update end_frame based on actual clip duration
-                    clip_duration = HieroClip.get_duration(clip)
-                    end_frame = timeline_in + clip_duration - 1
+                    # Update end_frame based on track item duration
+                    end_frame = timeline_in + item_duration - 1
 
                     shots_added += 1
 

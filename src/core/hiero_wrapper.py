@@ -284,14 +284,10 @@ class HieroTrackItem:
     @staticmethod
     def add_item_to_track(track: Any, clip: Any, timeline_in: int) -> Any:
         """
-        Add a clip to track at specified timeline position, using clip's full source range.
+        Add a clip to track at specified timeline position, using clip's full duration.
 
-        Per Hiero API:
-        1. Create TrackItem with name and type
-        2. Set source clip
-        3. Set source in/out to use clip's actual duration
-        4. Set timeline in point (out is calculated from source duration)
-        5. Add to track
+        Uses VideoTrack.addTrackItem(clip, position) or AudioTrack.addTrackItem(clip, channel, position)
+        which automatically handles the clip's duration correctly.
 
         Args:
             track: VideoTrack or AudioTrack
@@ -301,46 +297,30 @@ class HieroTrackItem:
         if not HIERO_AVAILABLE:
             return MockTrackItem(clip, timeline_in, timeline_in + 100)
 
-        # Get clip name for track item
+        # Get clip name for logging
         clip_name = "clip"
         try:
             if hasattr(clip, 'name'):
                 clip_name = clip.name()
-            elif hasattr(clip, 'mediaSource'):
-                source = clip.mediaSource()
-                if source:
-                    clip_name = source.filename().split('/')[-1].split('\\')[-1]
         except:
             pass
 
-        # Determine track type (video or audio)
-        track_type = hiero.core.TrackItem.kVideo
+        # Use the track's addTrackItem method which handles duration correctly
+        # For AudioTrack: addTrackItem(clip, audioChannel, position)
+        # For VideoTrack: addTrackItem(clip, position)
         if hasattr(track, 'isAudioTrack') and track.isAudioTrack():
-            track_type = hiero.core.TrackItem.kAudio
+            # Audio track - use channel 0 for first audio channel
+            track_item = track.addTrackItem(clip, 0, timeline_in)
+        else:
+            # Video track
+            track_item = track.addTrackItem(clip, timeline_in)
 
-        # Create track item
-        track_item = hiero.core.TrackItem(clip_name, track_type)
-
-        # Set source clip
-        track_item.setSource(clip)
-
-        # Get clip's actual source range (use full clip duration)
-        source_in = clip.sourceIn()
-        source_out = clip.sourceOut()
-        clip_duration = source_out - source_in + 1
-
-        # Set source range to use full clip
-        track_item.setSourceIn(source_in)
-        track_item.setSourceOut(source_out)
-
-        # Set timeline position (out is calculated from source duration)
-        track_item.setTimelineIn(timeline_in)
-        track_item.setTimelineOut(timeline_in + clip_duration - 1)
-
-        print(f"[HieroReview] Added clip: {clip_name}, source={source_in}-{source_out}, timeline={timeline_in}-{timeline_in + clip_duration - 1}")
-
-        # Add to track
-        track.addItem(track_item)
+        # Log the result
+        if track_item:
+            timeline_out = track_item.timelineOut()
+            source_in = track_item.sourceIn()
+            source_out = track_item.sourceOut()
+            print(f"[HieroReview] Added clip: {clip_name}, source={source_in}-{source_out}, timeline={timeline_in}-{timeline_out}")
 
         return track_item
     
@@ -375,6 +355,17 @@ class HieroTrackItem:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def get_duration(item: Any) -> int:
+        """Get track item duration in frames."""
+        if not HIERO_AVAILABLE:
+            return getattr(item, 'duration', 100)
+        try:
+            # duration() returns timeline duration
+            return item.duration()
+        except Exception:
+            return 100
 
 
 # ============================================================================
