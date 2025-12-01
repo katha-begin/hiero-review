@@ -4,7 +4,7 @@ Hiero API Wrapper Module
 Abstraction layer for Hiero API operations.
 Provides simplified interface and mock support for testing.
 """
-from typing import Optional, List, Any, Tuple
+from typing import Optional, List, Any, Tuple, Dict
 from dataclasses import dataclass
 
 # Try to import Hiero, fall back to mock if not available
@@ -101,6 +101,83 @@ class HieroTimeline:
                     if isinstance(seq, hiero.core.Sequence) and seq.name() == name:
                         return seq
         return None
+
+    @staticmethod
+    def get_video_track(sequence: Any) -> Any:
+        """Get first video track from sequence."""
+        if not HIERO_AVAILABLE or not sequence:
+            return None
+        for track in sequence.videoTracks():
+            return track
+        return None
+
+    @staticmethod
+    def get_audio_track(sequence: Any) -> Any:
+        """Get first audio track from sequence."""
+        if not HIERO_AVAILABLE or not sequence:
+            return None
+        for track in sequence.audioTracks():
+            return track
+        return None
+
+    @staticmethod
+    def get_track_items(sequence: Any) -> Dict[str, Any]:
+        """
+        Get all track items from sequence, keyed by shot name.
+
+        Returns:
+            Dict mapping shot_name -> track_item
+        """
+        items = {}
+        if not HIERO_AVAILABLE or not sequence:
+            return items
+
+        for track in sequence.videoTracks():
+            for item in track.items():
+                # Get shot name from metadata or item name
+                shot_name = None
+                try:
+                    tags = item.tags()
+                    for tag in tags:
+                        if tag.name() == "shot":
+                            shot_name = tag.note()
+                            break
+                except:
+                    pass
+
+                if not shot_name:
+                    shot_name = item.name()
+
+                if shot_name:
+                    items[shot_name] = item
+
+        return items
+
+    @staticmethod
+    def get_track_item_version(item: Any) -> str:
+        """Get version metadata from track item."""
+        if not HIERO_AVAILABLE or not item:
+            return None
+        try:
+            tags = item.tags()
+            for tag in tags:
+                if tag.name() == "version":
+                    return tag.note()
+        except:
+            pass
+        return None
+
+    @staticmethod
+    def remove_track_item(track: Any, item: Any) -> bool:
+        """Remove a track item from its track."""
+        if not HIERO_AVAILABLE or not track or not item:
+            return False
+        try:
+            track.removeItem(item)
+            return True
+        except Exception as e:
+            print(f"[HieroReview] Failed to remove track item: {e}")
+            return False
 
 
 class HieroClip:
