@@ -291,10 +291,15 @@ class ReviewToolController(QObject):
             self.dialog.log_message(f"Version: {config['version']}", "info")
             self.dialog.log_message(f"Media Type: {config['media_type']}", "info")
 
-            # Get project config for fps
+            # Get project config for fps and colorspace
             project_name = config.get('project', 'default')
             project_config = self._project_configs.get(project_name, {})
-            fps = project_config.get('settings', {}).get('fps', 24.0)
+            settings = project_config.get('settings', {})
+            fps = settings.get('fps', 24.0)
+            color_space = settings.get('color_space', None)  # e.g. 'raw', 'ACES', 'sRGB'
+
+            if color_space:
+                self.dialog.log_message(f"Colorspace: {color_space}", "info")
 
             # Create timeline name
             timeline_name = f"{config['episode']}_Review"
@@ -308,7 +313,8 @@ class ReviewToolController(QObject):
                 version=config['version'],
                 media_type=config['media_type'],
                 fps=fps,
-                include_audio=config.get('include_audio', True)
+                include_audio=config.get('include_audio', True),
+                color_space=color_space
             )
 
             # Create TimelineBuilder with progress callback

@@ -23,6 +23,7 @@ class TimelineConfig:
     media_type: str = "mov"  # "mov" or "sequence"
     fps: float = 24.0
     include_audio: bool = True
+    color_space: str = None  # Colorspace for clips (e.g. 'raw', 'ACES', 'sRGB')
 
 
 @dataclass
@@ -225,8 +226,13 @@ class TimelineBuilder:
             for i, pos in enumerate(positions):
                 self._report_progress(f"Adding clip: {pos.shot_name}", i + 1, len(positions))
 
-                # Create clip and add to bin
-                clip = HieroClip.create_clip(pos.clip_path, add_to_bin=True, bin_name=bin_name)
+                # Create clip and add to bin (with colorspace if set)
+                clip = HieroClip.create_clip(
+                    pos.clip_path,
+                    add_to_bin=True,
+                    bin_name=bin_name,
+                    color_space=config.color_space
+                )
 
                 # Add to VIDEO track
                 video_item = HieroTrackItem.add_item_to_track(

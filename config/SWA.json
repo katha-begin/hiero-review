@@ -18,7 +18,7 @@
   "settings": {
     "fps": 25.0,
     "resolution": [1920, 1080],
-    "color_space": "ACES",
+    "color_space": "raw",
     "default_department": "comp",
     "default_media_type": "mov"
   },

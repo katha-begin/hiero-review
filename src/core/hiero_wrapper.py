@@ -107,7 +107,7 @@ class HieroClip:
     """Wrapper for Hiero clip operations."""
 
     @staticmethod
-    def create_clip(media_path: str, add_to_bin: bool = True, bin_name: str = None) -> Any:
+    def create_clip(media_path: str, add_to_bin: bool = True, bin_name: str = None, color_space: str = None) -> Any:
         """
         Create a clip from media file and optionally add to bin.
 
@@ -115,6 +115,7 @@ class HieroClip:
             media_path: Path to media file (MOV or image sequence pattern)
             add_to_bin: Whether to add clip to project bin
             bin_name: Optional bin name (creates if not exists)
+            color_space: Optional colorspace to set (e.g. 'raw', 'ACES', 'sRGB')
 
         Returns:
             Clip object
@@ -125,6 +126,14 @@ class HieroClip:
         # Create media source and clip
         source = hiero.core.MediaSource(media_path)
         clip = hiero.core.Clip(source)
+
+        # Set colorspace if specified
+        if color_space:
+            try:
+                clip.setSourceMediaColourTransform(color_space)
+                print(f"[HieroReview] Set colorspace to '{color_space}' for: {media_path}")
+            except Exception as e:
+                print(f"[HieroReview] Warning: Could not set colorspace '{color_space}': {e}")
 
         # Add to bin if requested
         if add_to_bin:
