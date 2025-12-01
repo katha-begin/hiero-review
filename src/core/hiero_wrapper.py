@@ -282,18 +282,24 @@ class HieroTrackItem:
     """Wrapper for Hiero track item operations."""
 
     @staticmethod
-    def add_item_to_track(track: Any, clip: Any, timeline_in: int, timeline_out: int) -> Any:
+    def add_item_to_track(track: Any, clip: Any, timeline_in: int) -> Any:
         """
-        Add a clip to track at specified position.
+        Add a clip to track at specified timeline position, using clip's full source range.
 
         Per Hiero API:
         1. Create TrackItem with name and type
         2. Set source clip
-        3. Set timeline in/out points
-        4. Add to track
+        3. Set source in/out to use clip's actual duration
+        4. Set timeline in point (out is calculated from source duration)
+        5. Add to track
+
+        Args:
+            track: VideoTrack or AudioTrack
+            clip: Clip to add
+            timeline_in: Starting frame position on timeline
         """
         if not HIERO_AVAILABLE:
-            return MockTrackItem(clip, timeline_in, timeline_out)
+            return MockTrackItem(clip, timeline_in, timeline_in + 100)
 
         # Get clip name for track item
         clip_name = "clip"
@@ -318,9 +324,20 @@ class HieroTrackItem:
         # Set source clip
         track_item.setSource(clip)
 
-        # Set timeline position
+        # Get clip's actual source range (use full clip duration)
+        source_in = clip.sourceIn()
+        source_out = clip.sourceOut()
+        clip_duration = source_out - source_in + 1
+
+        # Set source range to use full clip
+        track_item.setSourceIn(source_in)
+        track_item.setSourceOut(source_out)
+
+        # Set timeline position (out is calculated from source duration)
         track_item.setTimelineIn(timeline_in)
-        track_item.setTimelineOut(timeline_out)
+        track_item.setTimelineOut(timeline_in + clip_duration - 1)
+
+        print(f"[HieroReview] Added clip: {clip_name}, source={source_in}-{source_out}, timeline={timeline_in}-{timeline_in + clip_duration - 1}")
 
         # Add to track
         track.addItem(track_item)

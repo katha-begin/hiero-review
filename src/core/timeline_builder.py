@@ -249,10 +249,6 @@ class TimelineBuilder:
         """Create a brand new timeline with all clips."""
         result = BuildResult(success=False, is_update=False)
 
-        # Convert to positions format (without version for position calc)
-        position_data = [(name, path, dur) for name, path, ver, dur in clips_data]
-        positions = self._calculate_positions(position_data)
-
         try:
             # Create bin for this review session
             bin_name = f"{config.episode}_Review_Media"
@@ -268,42 +264,50 @@ class TimelineBuilder:
                 audio_track = HieroTimeline.add_audio_track(sequence, "Audio")
 
             # Import clips to bin and add to track
-            self._report_progress(f"Importing {len(positions)} clips to bin and timeline")
+            # Calculate timeline positions dynamically based on actual clip durations
+            self._report_progress(f"Importing {len(clips_data)} clips to bin and timeline")
 
-            for i, (pos, clip_info) in enumerate(zip(positions, clips_data)):
-                shot_name, media_path, version, duration = clip_info
-                self._report_progress(f"Adding clip: {pos.shot_name}", i + 1, len(positions))
+            current_frame = 0  # Track current timeline position
+            shots_added = 0
+
+            for i, (shot_name, media_path, version, _) in enumerate(clips_data):
+                self._report_progress(f"Adding clip: {shot_name}", i + 1, len(clips_data))
 
                 # Create clip and add to bin (with colorspace if set)
                 clip = HieroClip.create_clip(
-                    pos.clip_path,
+                    media_path,
                     add_to_bin=True,
                     bin_name=bin_name,
                     color_space=config.color_space
                 )
 
-                # Add to VIDEO track
+                # Add to VIDEO track at current position (uses clip's actual source duration)
                 video_item = HieroTrackItem.add_item_to_track(
-                    video_track, clip, pos.timeline_in, pos.timeline_out
+                    video_track, clip, current_frame
                 )
 
                 # Add metadata tags to video item
-                HieroTrackItem.set_metadata(video_item, "shot", pos.shot_name)
+                HieroTrackItem.set_metadata(video_item, "shot", shot_name)
                 HieroTrackItem.set_metadata(video_item, "department", config.department)
                 HieroTrackItem.set_metadata(video_item, "version", version)
-                HieroTrackItem.set_metadata(video_item, "media_path", pos.clip_path)
+                HieroTrackItem.set_metadata(video_item, "media_path", media_path)
 
                 # Add to AUDIO track if enabled (MOV files have embedded audio)
                 if audio_track and config.include_audio:
-                    if pos.clip_path.lower().endswith('.mov'):
+                    if media_path.lower().endswith('.mov'):
                         audio_item = HieroTrackItem.add_item_to_track(
-                            audio_track, clip, pos.timeline_in, pos.timeline_out
+                            audio_track, clip, current_frame
                         )
-                        HieroTrackItem.set_metadata(audio_item, "shot", pos.shot_name)
+                        HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
+
+                # Get actual clip duration and advance timeline position
+                clip_duration = HieroClip.get_duration(clip)
+                current_frame += clip_duration
+                shots_added += 1
 
             result.success = True
             result.sequence = sequence
-            result.shots_added = len(positions)
+            result.shots_added = shots_added
 
         except Exception as e:
             import traceback
@@ -376,9 +380,9 @@ class TimelineBuilder:
                             color_space=config.color_space
                         )
 
-                        # Add to track at same position
+                        # Add to track at same position (uses clip's actual source duration)
                         video_item = HieroTrackItem.add_item_to_track(
-                            video_track, clip, timeline_in, timeline_out
+                            video_track, clip, timeline_in
                         )
                         HieroTrackItem.set_metadata(video_item, "shot", shot_name)
                         HieroTrackItem.set_metadata(video_item, "department", config.department)
@@ -388,7 +392,7 @@ class TimelineBuilder:
                         # Update audio track too
                         if audio_track and config.include_audio and media_path.lower().endswith('.mov'):
                             audio_item = HieroTrackItem.add_item_to_track(
-                                audio_track, clip, timeline_in, timeline_out
+                                audio_track, clip, timeline_in
                             )
                             HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
 
@@ -400,8 +404,6 @@ class TimelineBuilder:
                     self._report_progress(f"Adding new shot: {shot_name}")
 
                     timeline_in = end_frame + 1
-                    timeline_out = timeline_in + duration - 1
-                    end_frame = timeline_out
 
                     # Create clip
                     clip = HieroClip.create_clip(
@@ -409,9 +411,9 @@ class TimelineBuilder:
                         color_space=config.color_space
                     )
 
-                    # Add to video track
+                    # Add to video track (uses clip's actual source duration)
                     video_item = HieroTrackItem.add_item_to_track(
-                        video_track, clip, timeline_in, timeline_out
+                        video_track, clip, timeline_in
                     )
                     HieroTrackItem.set_metadata(video_item, "shot", shot_name)
                     HieroTrackItem.set_metadata(video_item, "department", config.department)
@@ -421,9 +423,13 @@ class TimelineBuilder:
                     # Add to audio track
                     if audio_track and config.include_audio and media_path.lower().endswith('.mov'):
                         audio_item = HieroTrackItem.add_item_to_track(
-                            audio_track, clip, timeline_in, timeline_out
+                            audio_track, clip, timeline_in
                         )
                         HieroTrackItem.set_metadata(audio_item, "shot", shot_name)
+
+                    # Update end_frame based on actual clip duration
+                    clip_duration = HieroClip.get_duration(clip)
+                    end_frame = timeline_in + clip_duration - 1
 
                     shots_added += 1
 
