@@ -12,6 +12,7 @@ from typing import Dict, Optional, List, Tuple
 EP_PATTERN = r'(Ep\d{2})'
 SEQ_PATTERN = r'(sq\d{4})'
 SHOT_PATTERN = r'(SH\d{4})'
+SHOT_WITH_SUFFIX_PATTERN = r'(SH\d{4})([A-Za-z])?'  # Matches SH0010, SH0010A, SH0010B
 VERSION_PATTERN = r'[_/]v(\d{3,4})'
 FRAME_PATTERN = r'\.(\d{4,5})\.\w+$'
 
@@ -19,6 +20,7 @@ FRAME_PATTERN = r'\.(\d{4,5})\.\w+$'
 _EP_RE = re.compile(EP_PATTERN, re.IGNORECASE)
 _SEQ_RE = re.compile(SEQ_PATTERN, re.IGNORECASE)
 _SHOT_RE = re.compile(SHOT_PATTERN, re.IGNORECASE)
+_SHOT_SUFFIX_RE = re.compile(SHOT_WITH_SUFFIX_PATTERN, re.IGNORECASE)
 _VERSION_RE = re.compile(VERSION_PATTERN, re.IGNORECASE)
 _FRAME_RE = re.compile(FRAME_PATTERN)
 
@@ -183,3 +185,151 @@ def get_frame_range(files: List[str]) -> Optional[Tuple[int, int]]:
         return (min(frames), max(frames))
     return None
 
+
+def is_sub_shot(shot_name: str) -> bool:
+    """
+    Check if a shot name is a sub-shot (has A, B, C suffix).
+
+    Args:
+        shot_name: Shot name like 'SH0010' or 'SH0010A'
+
+    Returns:
+        True if it's a sub-shot (e.g., SH0010A, SH0010B)
+
+    Example:
+        >>> is_sub_shot('SH0010')
+        False
+        >>> is_sub_shot('SH0010A')
+        True
+    """
+    match = _SHOT_SUFFIX_RE.search(shot_name)
+    if match:
+        suffix = match.group(2)
+        return suffix is not None
+    return False
+
+
+def get_base_shot(shot_name: str) -> str:
+    """
+    Get the base shot name without A/B/C suffix.
+
+    Args:
+        shot_name: Shot name like 'SH0010A'
+
+    Returns:
+        Base shot name like 'SH0010'
+
+    Example:
+        >>> get_base_shot('SH0010A')
+        'SH0010'
+    """
+    match = _SHOT_SUFFIX_RE.search(shot_name)
+    if match:
+        return match.group(1)
+    return shot_name
+
+
+def filter_sub_shots(shot_names: List[str]) -> List[str]:
+    """
+    Filter out sub-shots, keeping only base shots.
+    If both SH0010 and SH0010A exist, keep only SH0010.
+
+    Args:
+        shot_names: List of shot names
+
+    Returns:
+        Filtered list with only base shots
+
+    Example:
+        >>> filter_sub_shots(['SH0010', 'SH0010A', 'SH0010B', 'SH0020'])
+        ['SH0010', 'SH0020']
+    """
+    base_shots = set()
+    result = []
+
+    for shot in shot_names:
+        if is_sub_shot(shot):
+            # Skip sub-shots
+            continue
+        base = get_base_shot(shot)
+        if base not in base_shots:
+            base_shots.add(base)
+            result.append(shot)
+
+    return result
+
+
+def extract_shot_number(shot_name: str) -> int:
+    """
+    Extract numeric part of shot name for sorting.
+
+    Args:
+        shot_name: Shot name like 'SH0010' or 'SH0015'
+
+    Returns:
+        Numeric value (e.g., 10, 15)
+    """
+    match = re.search(r'\d+', shot_name)
+    if match:
+        return int(match.group())
+    return 0
+
+
+def extract_sequence_number(seq_name: str) -> int:
+    """
+    Extract numeric part of sequence name for sorting.
+
+    Args:
+        seq_name: Sequence name like 'sq0010' or 'sq0015'
+
+    Returns:
+        Numeric value (e.g., 10, 15)
+    """
+    match = re.search(r'\d+', seq_name)
+    if match:
+        return int(match.group())
+    return 0
+
+
+def sort_shots(shot_names: List[str]) -> List[str]:
+    """
+    Sort shots by numeric order.
+
+    Args:
+        shot_names: List of shot names
+
+    Returns:
+        Sorted list: SH0010, SH0015, SH0018, SH0020
+    """
+    return sorted(shot_names, key=extract_shot_number)
+
+
+def sort_sequences(seq_names: List[str]) -> List[str]:
+    """
+    Sort sequences by numeric order.
+
+    Args:
+        seq_names: List of sequence names
+
+    Returns:
+        Sorted list: sq0010, sq0015, sq0020
+    """
+    return sorted(seq_names, key=extract_sequence_number)
+
+
+def filter_and_sort_shots(shot_names: List[str]) -> List[str]:
+    """
+    Filter out sub-shots and sort by numeric order.
+
+    Args:
+        shot_names: List of shot names
+
+    Returns:
+        Filtered and sorted list
+
+    Example:
+        >>> filter_and_sort_shots(['SH0020', 'SH0010A', 'SH0010', 'SH0015'])
+        ['SH0010', 'SH0015', 'SH0020']
+    """
+    filtered = filter_sub_shots(shot_names)
+    return sort_shots(filtered)
