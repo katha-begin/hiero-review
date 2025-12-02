@@ -2,6 +2,11 @@
 Timeline Builder Module
 ========================
 Main timeline construction logic for assembling shots into organized timelines.
+
+Structure:
+- Media Bin: {EP}/{seq}/ (nested bins)
+- Sequence Timeline: {EP}_{seq}_review (contains shots in order)
+- Episode Timeline: {EP}_all_review (contains nested sequence timelines)
 """
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable, Any, Tuple
@@ -10,6 +15,7 @@ from pathlib import Path
 from .file_scanner import ProjectScanner
 from .hiero_wrapper import HieroProject, HieroTimeline, HieroClip, HieroTrackItem
 from .version_manager import VersionManager
+from ..utils.path_parser import filter_and_sort_shots, sort_sequences
 
 
 @dataclass
@@ -96,13 +102,8 @@ class TimelineBuilder:
             self._progress_callback(message, current, total)
     
     def _sort_shots(self, shots: List[str]) -> List[str]:
-        """Sort shots naturally (SH0010 before SH0020)."""
-        def sort_key(shot: str) -> int:
-            # Extract number from shot name
-            import re
-            match = re.search(r'(\d+)', shot)
-            return int(match.group(1)) if match else 0
-        return sorted(shots, key=sort_key)
+        """Sort and filter shots (remove sub-shots like SH0010A, SH0010B)."""
+        return filter_and_sort_shots(shots)
     
     def _get_media_path(
         self, ep: str, seq: str, shot: str, dept: str, version: str, media_type: str, shot_data: Dict
@@ -151,33 +152,29 @@ class TimelineBuilder:
         
         return positions
     
-    def _scan_shots_data(self, config: TimelineConfig) -> List[Tuple[str, str, str, int]]:
+    def _scan_shots_for_sequence(self, config: TimelineConfig, seq: str) -> List[Tuple[str, str, str, int]]:
         """
-        Scan and collect shot data from all sequences.
+        Scan and collect shot data for a single sequence.
+
+        Args:
+            config: TimelineConfig with build parameters
+            seq: Sequence name (e.g., 'sq0010')
 
         Returns:
-            List of (shot_name, media_path, version, duration) tuples
+            List of (shot_name, media_path, version, duration) tuples, sorted by shot order
         """
         clips_data = []
+        ep = config.episode
 
-        self._report_progress(f"Scanner root: {self._scanner._project_root}")
+        self._report_progress(f"Scanning sequence: {ep}/{seq}")
 
-        # Collect shots from all sequences
-        all_shots = []
-        for seq in config.sequences:
-            self._report_progress(f"Scanning sequence: {config.episode}/{seq}")
-            shots = self._scanner.scan_shots(config.episode, seq)
-            self._report_progress(f"  Found {len(shots)} shots: {shots}")
-            for shot in shots:
-                all_shots.append((config.episode, seq, shot))
+        # Get shots and filter out sub-shots (SH0010A, SH0010B), then sort
+        raw_shots = self._scanner.scan_shots(ep, seq)
+        shots = self._sort_shots(raw_shots)  # Uses filter_and_sort_shots
 
-        total_shots = len(all_shots)
-        self._report_progress(f"Total shots found: {total_shots}", 0, total_shots)
+        self._report_progress(f"  Found {len(shots)} shots (filtered): {shots}")
 
-        # Process each shot
-        for i, (ep, seq, shot) in enumerate(all_shots):
-            self._report_progress(f"Processing {shot}", i + 1, total_shots)
-
+        for shot in shots:
             shot_data = self._scanner.scan_shot_detail(ep, seq, shot)
             dept_data = shot_data.get(config.department, {})
 
@@ -206,6 +203,26 @@ class TimelineBuilder:
             shot_name = f"{ep}_{seq}_{shot}"
             clips_data.append((shot_name, media_path, version, duration))
 
+        return clips_data
+
+    def _scan_shots_data(self, config: TimelineConfig) -> List[Tuple[str, str, str, int]]:
+        """
+        Scan and collect shot data from all sequences.
+
+        Returns:
+            List of (shot_name, media_path, version, duration) tuples
+        """
+        clips_data = []
+        self._report_progress(f"Scanner root: {self._scanner._project_root}")
+
+        # Sort sequences by numeric order
+        sorted_sequences = sort_sequences(config.sequences)
+
+        for seq in sorted_sequences:
+            seq_clips = self._scan_shots_for_sequence(config, seq)
+            clips_data.extend(seq_clips)
+
+        self._report_progress(f"Total shots found: {len(clips_data)}")
         return clips_data
 
     def build_timeline(self, config: TimelineConfig) -> BuildResult:
@@ -244,16 +261,45 @@ class TimelineBuilder:
             self._report_progress(f"Creating new sequence: {timeline_name}")
             return self._create_new_timeline(config, timeline_name, clips_data)
 
+    def _get_bin_path_for_shot(self, shot_name: str) -> str:
+        """
+        Get nested bin path for a shot.
+
+        Args:
+            shot_name: Shot name like 'Ep01_sq0010_SH0010'
+
+        Returns:
+            Bin path like 'Ep01/sq0010'
+        """
+        parts = shot_name.split('_')
+        if len(parts) >= 2:
+            ep = parts[0]   # Ep01
+            seq = parts[1]  # sq0010
+            return f"{ep}/{seq}"
+        return shot_name
+
+    def _check_clip_in_bin(self, bin_path: str, shot_name: str) -> Any:
+        """
+        Check if a clip for this shot already exists in the bin.
+
+        Args:
+            bin_path: Bin path like 'Ep01/sq0010'
+            shot_name: Shot name to search for
+
+        Returns:
+            Existing clip if found, None otherwise
+        """
+        existing_clip = HieroClip.find_clip_in_bin(bin_path, shot_name)
+        if existing_clip:
+            self._report_progress(f"  Found existing clip in bin: {shot_name}")
+        return existing_clip
+
     def _create_new_timeline(self, config: TimelineConfig, timeline_name: str,
                               clips_data: List[Tuple[str, str, str, int]]) -> BuildResult:
         """Create a brand new timeline with all clips."""
         result = BuildResult(success=False, is_update=False)
 
         try:
-            # Create bin for this review session
-            bin_name = f"{config.episode}_Review_Media"
-            self._report_progress(f"Creating bin: {bin_name}")
-
             # Create sequence
             sequence = HieroTimeline.create_sequence(timeline_name, config.fps)
             video_track = HieroTimeline.add_video_track(sequence, "Video")
@@ -264,22 +310,35 @@ class TimelineBuilder:
                 audio_track = HieroTimeline.add_audio_track(sequence, "Audio")
 
             # Import clips to bin and add to track
-            # Calculate timeline positions dynamically based on actual clip durations
             self._report_progress(f"Importing {len(clips_data)} clips to bin and timeline")
 
             current_frame = 0  # Track current timeline position
             shots_added = 0
+            shots_skipped = 0
 
             for i, (shot_name, media_path, version, _) in enumerate(clips_data):
                 self._report_progress(f"Adding clip: {shot_name}", i + 1, len(clips_data))
 
-                # Create clip and add to bin (with colorspace if set)
-                clip = HieroClip.create_clip(
-                    media_path,
-                    add_to_bin=True,
-                    bin_name=bin_name,
-                    color_space=config.color_space
-                )
+                # Determine bin path: {EP}/{seq}
+                bin_path = self._get_bin_path_for_shot(shot_name)
+                self._report_progress(f"  Bin path: {bin_path}")
+
+                # Check if clip already exists in bin
+                clip = self._check_clip_in_bin(bin_path, shot_name)
+
+                if clip:
+                    # Use existing clip from bin
+                    shots_skipped += 1
+                    self._report_progress(f"  Using existing clip from bin: {shot_name}")
+                else:
+                    # Create new clip and add to bin (with colorspace if set)
+                    clip = HieroClip.create_clip(
+                        media_path,
+                        add_to_bin=True,
+                        bin_name=bin_path,  # Nested bin path: Ep01/sq0010
+                        color_space=config.color_space
+                    )
+                    self._report_progress(f"  Imported new clip: {shot_name}")
 
                 # Add to VIDEO track at current position (uses clip's actual source duration)
                 video_item = HieroTrackItem.add_item_to_track(
@@ -310,6 +369,7 @@ class TimelineBuilder:
             result.success = True
             result.sequence = sequence
             result.shots_added = shots_added
+            self._report_progress(f"Clips imported: {shots_added - shots_skipped}, reused from bin: {shots_skipped}")
 
         except Exception as e:
             import traceback
@@ -339,9 +399,6 @@ class TimelineBuilder:
                 result.errors.append("No video track found in existing sequence")
                 return result
 
-            # Bin name for new clips
-            bin_name = f"{config.episode}_Review_Media"
-
             # Find the end position of existing timeline
             end_frame = 0
             for item_name, item in existing_items.items():
@@ -356,6 +413,9 @@ class TimelineBuilder:
             shots_updated = 0
 
             for shot_name, media_path, version, duration in clips_data:
+                # Determine bin path: {EP}/{seq}
+                bin_path = self._get_bin_path_for_shot(shot_name)
+
                 if shot_name in existing_items:
                     # Shot exists - check if version is newer
                     existing_item = existing_items[shot_name]
@@ -368,21 +428,22 @@ class TimelineBuilder:
                         # Get existing position
                         try:
                             timeline_in = existing_item.timelineIn()
-                            timeline_out = existing_item.timelineOut()
                         except:
                             timeline_in = end_frame + 1
-                            timeline_out = timeline_in + duration - 1
 
                         # Remove old item
                         HieroTimeline.remove_track_item(video_track, existing_item)
 
-                        # Create new clip with updated version
-                        clip = HieroClip.create_clip(
-                            media_path, add_to_bin=True, bin_name=bin_name,
-                            color_space=config.color_space
-                        )
+                        # Check if clip exists in bin first
+                        clip = self._check_clip_in_bin(bin_path, shot_name)
+                        if not clip:
+                            # Create new clip with updated version
+                            clip = HieroClip.create_clip(
+                                media_path, add_to_bin=True, bin_name=bin_path,
+                                color_space=config.color_space
+                            )
 
-                        # Add to track at same position (uses clip's actual source duration)
+                        # Add to track at same position
                         video_item = HieroTrackItem.add_item_to_track(
                             video_track, clip, timeline_in
                         )
@@ -407,13 +468,16 @@ class TimelineBuilder:
 
                     timeline_in = end_frame + 1
 
-                    # Create clip
-                    clip = HieroClip.create_clip(
-                        media_path, add_to_bin=True, bin_name=bin_name,
-                        color_space=config.color_space
-                    )
+                    # Check if clip exists in bin first
+                    clip = self._check_clip_in_bin(bin_path, shot_name)
+                    if not clip:
+                        # Create new clip
+                        clip = HieroClip.create_clip(
+                            media_path, add_to_bin=True, bin_name=bin_path,
+                            color_space=config.color_space
+                        )
 
-                    # Add to video track (uses clip's actual source duration)
+                    # Add to video track
                     video_item = HieroTrackItem.add_item_to_track(
                         video_track, clip, timeline_in
                     )
