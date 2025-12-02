@@ -134,14 +134,13 @@ class HieroTimeline:
 
         for track in sequence.videoTracks():
             for item in track.items():
-                # Get shot name from metadata or item name
+                # Get shot name from metadata first, then fall back to item name
                 shot_name = None
                 try:
-                    tags = item.tags()
-                    for tag in tags:
-                        if tag.name() == "shot":
-                            shot_name = tag.note()
-                            break
+                    # Try to get from metadata (where we store it)
+                    metadata = item.metadata()
+                    if metadata:
+                        shot_name = metadata.value("shot")
                 except:
                     pass
 
@@ -150,6 +149,7 @@ class HieroTimeline:
 
                 if shot_name:
                     items[shot_name] = item
+                    print(f"[HieroReview] Found existing shot: {shot_name}")
 
         return items
 
@@ -159,10 +159,12 @@ class HieroTimeline:
         if not HIERO_AVAILABLE or not item:
             return None
         try:
-            tags = item.tags()
-            for tag in tags:
-                if tag.name() == "version":
-                    return tag.note()
+            # Read from metadata (where we store it)
+            metadata = item.metadata()
+            if metadata:
+                version = metadata.value("version")
+                if version:
+                    return version
         except:
             pass
         return None
