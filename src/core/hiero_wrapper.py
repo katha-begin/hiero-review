@@ -231,22 +231,49 @@ class HieroClip:
         return clip
 
     @staticmethod
-    def _get_or_create_bin(project: Any, bin_name: str) -> Any:
-        """Find existing bin or create new one."""
+    def _get_or_create_bin(project: Any, bin_path: str) -> Any:
+        """
+        Find existing bin or create new one. Supports nested paths.
+
+        Args:
+            project: Hiero project
+            bin_path: Bin path, can be nested like "Ep01/sq0010"
+
+        Returns:
+            Target bin object
+        """
         if not HIERO_AVAILABLE:
-            return MockBin(bin_name)
+            return MockBin(bin_path)
 
         clips_bin = project.clipsBin()
 
-        # Search for existing bin
-        for item in clips_bin.items():
-            if hasattr(item, 'name') and item.name() == bin_name:
-                return item
+        # Split path into parts (e.g., "Ep01/sq0010" -> ["Ep01", "sq0010"])
+        path_parts = bin_path.replace("\\", "/").split("/")
 
-        # Create new bin
-        new_bin = hiero.core.Bin(bin_name)
-        clips_bin.addItem(new_bin)
-        return new_bin
+        current_bin = clips_bin
+        for part in path_parts:
+            if not part:
+                continue
+
+            # Search for existing bin at this level
+            found_bin = None
+            for item in current_bin.items():
+                if hasattr(item, 'name') and item.name() == part:
+                    # Check if it's a Bin (not a clip)
+                    if hasattr(item, 'items'):
+                        found_bin = item
+                        break
+
+            if found_bin:
+                current_bin = found_bin
+            else:
+                # Create new bin at this level
+                new_bin = hiero.core.Bin(part)
+                current_bin.addItem(new_bin)
+                current_bin = new_bin
+                print(f"[HieroReview] Created bin: {part}")
+
+        return current_bin
 
     @staticmethod
     def create_from_sequence(pattern: str, frame_range: Tuple[int, int], add_to_bin: bool = True) -> Any:
@@ -278,6 +305,88 @@ class HieroClip:
         if not HIERO_AVAILABLE:
             return getattr(clip, 'fps', 24.0)
         return clip.framerate().toFloat()
+
+    @staticmethod
+    def find_clip_in_bin(bin_path: str, clip_name: str) -> Any:
+        """
+        Find a clip by name in a specific bin.
+
+        Args:
+            bin_path: Bin path like "Ep01/sq0010"
+            clip_name: Name of the clip to find
+
+        Returns:
+            Clip object if found, None otherwise
+        """
+        if not HIERO_AVAILABLE:
+            return None
+
+        project = HieroProject.get_active_project()
+        if not project:
+            return None
+
+        # Get the target bin
+        target_bin = HieroClip._get_or_create_bin(project, bin_path)
+
+        # Search for clip in bin
+        for item in target_bin.items():
+            # BinItem contains the actual clip
+            if hasattr(item, 'activeItem'):
+                clip = item.activeItem()
+                if clip and hasattr(clip, 'name') and clip.name() == clip_name:
+                    return clip
+            elif hasattr(item, 'name') and item.name() == clip_name:
+                return item
+
+        return None
+
+    @staticmethod
+    def get_clips_in_bin(bin_path: str) -> List[Any]:
+        """
+        Get all clips in a specific bin.
+
+        Args:
+            bin_path: Bin path like "Ep01/sq0010"
+
+        Returns:
+            List of clip objects
+        """
+        if not HIERO_AVAILABLE:
+            return []
+
+        project = HieroProject.get_active_project()
+        if not project:
+            return []
+
+        clips_bin = project.clipsBin()
+
+        # Navigate to target bin
+        path_parts = bin_path.replace("\\", "/").split("/")
+        current_bin = clips_bin
+
+        for part in path_parts:
+            if not part:
+                continue
+            found_bin = None
+            for item in current_bin.items():
+                if hasattr(item, 'name') and item.name() == part and hasattr(item, 'items'):
+                    found_bin = item
+                    break
+            if found_bin:
+                current_bin = found_bin
+            else:
+                # Bin doesn't exist
+                return []
+
+        # Collect clips from bin
+        clips = []
+        for item in current_bin.items():
+            if hasattr(item, 'activeItem'):
+                clip = item.activeItem()
+                if clip:
+                    clips.append(clip)
+
+        return clips
 
 
 class HieroTrackItem:
