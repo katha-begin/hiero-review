@@ -264,17 +264,19 @@ class TimelineBuilder:
 
             # Generate sequence timeline name: Ep01_sq0010_review
             seq_timeline_name = f"{config.episode}_{seq}_review"
-            self._report_progress(f"  Sequence timeline: {seq_timeline_name}")
+            # Sequence timeline goes in EP bin (e.g., "Ep01")
+            seq_bin_path = config.episode
+            self._report_progress(f"  Sequence timeline: {seq_timeline_name} in bin: {seq_bin_path}")
 
-            # Check if sequence timeline exists
-            existing_seq = HieroTimeline.get_sequence_by_name(seq_timeline_name)
+            # Check if sequence timeline exists (search in EP bin)
+            existing_seq = HieroTimeline.get_sequence_by_name(seq_timeline_name, bin_path=seq_bin_path)
 
             if existing_seq:
                 self._report_progress(f"  Updating existing sequence timeline: {seq_timeline_name}")
                 seq_result = self._update_existing_timeline(config, existing_seq, seq_timeline_name, seq_clips_data)
             else:
                 self._report_progress(f"  Creating new sequence timeline: {seq_timeline_name}")
-                seq_result = self._create_new_timeline(config, seq_timeline_name, seq_clips_data)
+                seq_result = self._create_new_timeline(config, seq_timeline_name, seq_clips_data, sequence_bin_path=seq_bin_path)
 
             if seq_result.success:
                 sequence_timelines[seq] = seq_result.sequence
@@ -320,7 +322,9 @@ class TimelineBuilder:
 
         try:
             ep_timeline_name = f"{config.episode}_all_review"
-            self._report_progress(f"EP timeline: {ep_timeline_name}")
+            # EP timeline goes in EP bin (e.g., "Ep01")
+            ep_bin_path = config.episode
+            self._report_progress(f"EP timeline: {ep_timeline_name} in bin: {ep_bin_path}")
 
             # Collect all clips data ordered by sequence then shot
             all_clips_data = []
@@ -337,15 +341,15 @@ class TimelineBuilder:
 
             self._report_progress(f"Found {len(all_clips_data)} clips for EP timeline")
 
-            # Check if EP timeline exists
-            existing_ep = HieroTimeline.get_sequence_by_name(ep_timeline_name)
+            # Check if EP timeline exists (search in EP bin)
+            existing_ep = HieroTimeline.get_sequence_by_name(ep_timeline_name, bin_path=ep_bin_path)
 
             if existing_ep:
                 self._report_progress(f"Updating existing EP timeline: {ep_timeline_name}")
                 ep_result = self._update_existing_timeline(config, existing_ep, ep_timeline_name, all_clips_data)
             else:
                 self._report_progress(f"Creating new EP timeline: {ep_timeline_name}")
-                ep_result = self._create_new_timeline(config, ep_timeline_name, all_clips_data)
+                ep_result = self._create_new_timeline(config, ep_timeline_name, all_clips_data, sequence_bin_path=ep_bin_path)
 
             result.success = ep_result.success
             result.sequence = ep_result.sequence
@@ -396,13 +400,22 @@ class TimelineBuilder:
         return existing_clip
 
     def _create_new_timeline(self, config: TimelineConfig, timeline_name: str,
-                              clips_data: List[Tuple[str, str, str, int]]) -> BuildResult:
-        """Create a brand new timeline with all clips."""
+                              clips_data: List[Tuple[str, str, str, int]],
+                              sequence_bin_path: str = None) -> BuildResult:
+        """
+        Create a brand new timeline with all clips.
+
+        Args:
+            config: TimelineConfig
+            timeline_name: Name for the sequence
+            clips_data: List of (shot_name, media_path, version, priority) tuples
+            sequence_bin_path: Optional bin path to create sequence in (e.g., "Ep01")
+        """
         result = BuildResult(success=False, is_update=False)
 
         try:
-            # Create sequence
-            sequence = HieroTimeline.create_sequence(timeline_name, config.fps)
+            # Create sequence in specified bin
+            sequence = HieroTimeline.create_sequence(timeline_name, config.fps, bin_path=sequence_bin_path)
             video_track = HieroTimeline.add_video_track(sequence, "Video")
 
             # Add audio track if requested

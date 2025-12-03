@@ -60,17 +60,35 @@ class HieroProject:
 
 class HieroTimeline:
     """Wrapper for Hiero timeline/sequence operations."""
-    
+
     @staticmethod
-    def create_sequence(name: str, fps: float = 24.0) -> Any:
-        """Create a new sequence."""
+    def create_sequence(name: str, fps: float = 24.0, bin_path: str = None) -> Any:
+        """
+        Create a new sequence.
+
+        Args:
+            name: Sequence name
+            fps: Frame rate
+            bin_path: Optional bin path to create sequence in (e.g., "Ep01")
+
+        Returns:
+            Sequence object
+        """
         if not HIERO_AVAILABLE:
             return MockSequence(name, fps)
         project = HieroProject.get_active_project()
         if project:
             sequence = hiero.core.Sequence(name)
             sequence.setFramerate(fps)
-            project.clipsBin().addItem(hiero.core.BinItem(sequence))
+
+            # Determine target bin
+            if bin_path:
+                target_bin = HieroClip._get_or_create_bin(project, bin_path)
+            else:
+                target_bin = project.clipsBin()
+
+            target_bin.addItem(hiero.core.BinItem(sequence))
+            print(f"[HieroReview] Created sequence '{name}' in bin: {bin_path or 'root'}")
             return sequence
         return None
     
@@ -89,17 +107,50 @@ class HieroTimeline:
         return sequence.addTrack(hiero.core.AudioTrack(name))
     
     @staticmethod
-    def get_sequence_by_name(name: str) -> Any:
-        """Find sequence by name in active project."""
+    def get_sequence_by_name(name: str, bin_path: str = None) -> Any:
+        """
+        Find sequence by name in active project.
+
+        Args:
+            name: Sequence name to find
+            bin_path: Optional bin path to search in (e.g., "Ep01")
+
+        Returns:
+            Sequence object if found, None otherwise
+        """
         if not HIERO_AVAILABLE:
             return None
         project = HieroProject.get_active_project()
-        if project:
-            for item in project.clipsBin().items():
-                if hasattr(item, 'activeItem'):
-                    seq = item.activeItem()
-                    if isinstance(seq, hiero.core.Sequence) and seq.name() == name:
-                        return seq
+        if not project:
+            return None
+
+        # Determine which bin to search
+        if bin_path:
+            search_bin = HieroClip._get_or_create_bin(project, bin_path)
+        else:
+            search_bin = project.clipsBin()
+
+        # Search in the target bin and its sub-bins recursively
+        return HieroTimeline._find_sequence_in_bin(search_bin, name)
+
+    @staticmethod
+    def _find_sequence_in_bin(bin_obj: Any, name: str) -> Any:
+        """Recursively search for sequence in bin and sub-bins."""
+        if not HIERO_AVAILABLE:
+            return None
+
+        for item in bin_obj.items():
+            # Check if this is a sequence
+            if hasattr(item, 'activeItem'):
+                content = item.activeItem()
+                if isinstance(content, hiero.core.Sequence) and content.name() == name:
+                    return content
+            # Check if this is a sub-bin to search
+            if hasattr(item, 'items') and hasattr(item, 'name'):
+                # It's a bin, search recursively
+                found = HieroTimeline._find_sequence_in_bin(item, name)
+                if found:
+                    return found
         return None
 
     @staticmethod
