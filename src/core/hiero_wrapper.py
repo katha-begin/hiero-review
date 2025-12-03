@@ -181,50 +181,6 @@ class HieroTimeline:
             print(f"[HieroReview] Failed to remove track item: {e}")
             return False
 
-    @staticmethod
-    def add_sequence_to_track(track: Any, sequence: Any, timeline_in: int) -> Any:
-        """
-        Add a sequence (nested timeline) to a video track.
-
-        In Hiero, a Sequence can be added to another Sequence's track,
-        creating a nested timeline effect.
-
-        Args:
-            track: VideoTrack to add to
-            sequence: Sequence object to add as nested clip
-            timeline_in: Starting frame position on timeline
-
-        Returns:
-            TrackItem containing the nested sequence
-        """
-        if not HIERO_AVAILABLE:
-            return MockTrackItem(sequence, timeline_in, timeline_in + 100)
-
-        try:
-            # Use addTrackItem with the sequence - Hiero treats sequences like clips
-            track_item = track.addTrackItem(sequence, timeline_in)
-
-            if track_item:
-                seq_name = sequence.name() if hasattr(sequence, 'name') else "sequence"
-                timeline_out = track_item.timelineOut()
-                print(f"[HieroReview] Added nested sequence: {seq_name}, timeline={timeline_in}-{timeline_out}")
-
-            return track_item
-        except Exception as e:
-            print(f"[HieroReview] Failed to add sequence to track: {e}")
-            return None
-
-    @staticmethod
-    def get_sequence_duration(sequence: Any) -> int:
-        """Get the duration of a sequence in frames."""
-        if not HIERO_AVAILABLE or not sequence:
-            return 0
-        try:
-            return sequence.duration()
-        except:
-            return 0
-
-
 class HieroClip:
     """Wrapper for Hiero clip operations."""
 

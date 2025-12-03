@@ -304,11 +304,14 @@ class TimelineBuilder:
 
     def _build_ep_timeline(self, config: TimelineConfig, sequence_timelines: Dict[str, Any]) -> BuildResult:
         """
-        Build or update the EP timeline with nested sequence timelines.
+        Build or update the EP timeline with all clips from all sequences.
+
+        Clips are ordered by sequence first, then by shot number.
+        Example order: sq0010/SH0010, sq0010/SH0020, sq0020/SH0010, sq0020/SH0020
 
         Args:
             config: TimelineConfig
-            sequence_timelines: Dict mapping seq_name -> sequence object
+            sequence_timelines: Dict mapping seq_name -> sequence object (used for ordering)
 
         Returns:
             BuildResult
@@ -319,53 +322,38 @@ class TimelineBuilder:
             ep_timeline_name = f"{config.episode}_all_review"
             self._report_progress(f"EP timeline: {ep_timeline_name}")
 
+            # Collect all clips data ordered by sequence then shot
+            all_clips_data = []
+            sorted_seqs = sort_sequences(list(sequence_timelines.keys()))
+
+            for seq in sorted_seqs:
+                seq_clips = self._scan_shots_for_sequence(config, seq)
+                if seq_clips:
+                    all_clips_data.extend(seq_clips)
+
+            if not all_clips_data:
+                result.errors.append("No clips found for EP timeline")
+                return result
+
+            self._report_progress(f"Found {len(all_clips_data)} clips for EP timeline")
+
             # Check if EP timeline exists
             existing_ep = HieroTimeline.get_sequence_by_name(ep_timeline_name)
 
             if existing_ep:
                 self._report_progress(f"Updating existing EP timeline: {ep_timeline_name}")
-                # For now, we'll rebuild the EP timeline
-                # TODO: Implement smarter update logic
-                ep_sequence = existing_ep
-                video_track = HieroTimeline.get_video_track(ep_sequence)
+                ep_result = self._update_existing_timeline(config, existing_ep, ep_timeline_name, all_clips_data)
             else:
                 self._report_progress(f"Creating new EP timeline: {ep_timeline_name}")
-                ep_sequence = HieroTimeline.create_sequence(ep_timeline_name, config.fps)
-                video_track = HieroTimeline.add_video_track(ep_sequence, "Video")
+                ep_result = self._create_new_timeline(config, ep_timeline_name, all_clips_data)
 
-            if not video_track:
-                result.errors.append("Failed to get/create video track for EP timeline")
-                return result
+            result.success = ep_result.success
+            result.sequence = ep_result.sequence
+            result.shots_added = ep_result.shots_added
+            result.shots_updated = ep_result.shots_updated
+            result.errors = ep_result.errors
 
-            # Add sequence timelines in order
-            sorted_seqs = sort_sequences(list(sequence_timelines.keys()))
-            current_frame = 0
-
-            for seq in sorted_seqs:
-                seq_timeline = sequence_timelines.get(seq)
-                if not seq_timeline:
-                    continue
-
-                self._report_progress(f"  Adding {seq} to EP timeline at frame {current_frame}")
-
-                # Add sequence to EP timeline track
-                track_item = HieroTimeline.add_sequence_to_track(video_track, seq_timeline, current_frame)
-
-                if track_item:
-                    # Set metadata
-                    HieroTrackItem.set_metadata(track_item, "sequence", seq)
-
-                    # Get duration and advance position
-                    seq_duration = HieroTimeline.get_sequence_duration(seq_timeline)
-                    if seq_duration > 0:
-                        current_frame += seq_duration
-                    else:
-                        # Fallback: get from track item
-                        current_frame = track_item.timelineOut() + 1
-
-            result.success = True
-            result.sequence = ep_sequence
-            self._report_progress(f"EP timeline built with {len(sorted_seqs)} sequences")
+            self._report_progress(f"EP timeline: added={result.shots_added}, updated={result.shots_updated}")
 
         except Exception as e:
             import traceback
