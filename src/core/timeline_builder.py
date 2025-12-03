@@ -227,10 +227,12 @@ class TimelineBuilder:
 
     def build_timeline(self, config: TimelineConfig) -> BuildResult:
         """
-        Build or update a timeline based on configuration.
+        Build or update timelines based on configuration.
 
-        If a sequence with the generated name exists, updates it (adds new shots,
-        updates shots with newer versions). Otherwise creates a new sequence.
+        New workflow:
+        1. For each selected sequence, build/update its sequence timeline (e.g., Ep01_sq0010_review)
+        2. If all sequences selected, also build/update the EP timeline (Ep01_all_review)
+           which contains nested sequence timelines
 
         Args:
             config: TimelineConfig with build parameters
@@ -239,27 +241,138 @@ class TimelineBuilder:
             BuildResult with success status and details
         """
         result = BuildResult(success=False)
+        total_shots_added = 0
+        total_shots_updated = 0
+        all_errors = []
 
-        # Generate timeline name based on selected sequences
-        timeline_name = config.generate_timeline_name()
-        self._report_progress(f"Timeline name: {timeline_name}")
+        # Sort sequences by numeric order
+        sorted_sequences = sort_sequences(config.sequences)
+        self._report_progress(f"Building timelines for sequences: {sorted_sequences}")
 
-        # Scan all shot data first
-        clips_data = self._scan_shots_data(config)
+        # Step 1: Build/update individual sequence timelines
+        sequence_timelines = {}  # seq_name -> sequence object
 
-        if not clips_data:
-            result.errors.append("No valid shots found")
-            return result
+        for seq in sorted_sequences:
+            self._report_progress(f"Processing sequence: {seq}")
 
-        # Check if sequence already exists
-        existing_sequence = HieroTimeline.get_sequence_by_name(timeline_name)
+            # Scan shots for this sequence
+            seq_clips_data = self._scan_shots_for_sequence(config, seq)
 
-        if existing_sequence:
-            self._report_progress(f"Found existing sequence: {timeline_name}")
-            return self._update_existing_timeline(config, existing_sequence, timeline_name, clips_data)
-        else:
-            self._report_progress(f"Creating new sequence: {timeline_name}")
-            return self._create_new_timeline(config, timeline_name, clips_data)
+            if not seq_clips_data:
+                self._report_progress(f"  No shots found for {seq}, skipping")
+                continue
+
+            # Generate sequence timeline name: Ep01_sq0010_review
+            seq_timeline_name = f"{config.episode}_{seq}_review"
+            self._report_progress(f"  Sequence timeline: {seq_timeline_name}")
+
+            # Check if sequence timeline exists
+            existing_seq = HieroTimeline.get_sequence_by_name(seq_timeline_name)
+
+            if existing_seq:
+                self._report_progress(f"  Updating existing sequence timeline: {seq_timeline_name}")
+                seq_result = self._update_existing_timeline(config, existing_seq, seq_timeline_name, seq_clips_data)
+            else:
+                self._report_progress(f"  Creating new sequence timeline: {seq_timeline_name}")
+                seq_result = self._create_new_timeline(config, seq_timeline_name, seq_clips_data)
+
+            if seq_result.success:
+                sequence_timelines[seq] = seq_result.sequence
+                total_shots_added += seq_result.shots_added
+                total_shots_updated += seq_result.shots_updated
+            else:
+                all_errors.extend(seq_result.errors)
+
+        # Step 2: Build/update EP timeline if all sequences selected
+        if config.is_all_sequences_selected() and sequence_timelines:
+            self._report_progress("Building EP timeline with nested sequences...")
+            ep_result = self._build_ep_timeline(config, sequence_timelines)
+            if not ep_result.success:
+                all_errors.extend(ep_result.errors)
+
+        # Return combined result
+        result.success = len(sequence_timelines) > 0
+        result.shots_added = total_shots_added
+        result.shots_updated = total_shots_updated
+        result.errors = all_errors
+
+        # Return the first sequence timeline as the main result
+        if sequence_timelines:
+            result.sequence = list(sequence_timelines.values())[0]
+
+        return result
+
+    def _build_ep_timeline(self, config: TimelineConfig, sequence_timelines: Dict[str, Any]) -> BuildResult:
+        """
+        Build or update the EP timeline with nested sequence timelines.
+
+        Args:
+            config: TimelineConfig
+            sequence_timelines: Dict mapping seq_name -> sequence object
+
+        Returns:
+            BuildResult
+        """
+        result = BuildResult(success=False)
+
+        try:
+            ep_timeline_name = f"{config.episode}_all_review"
+            self._report_progress(f"EP timeline: {ep_timeline_name}")
+
+            # Check if EP timeline exists
+            existing_ep = HieroTimeline.get_sequence_by_name(ep_timeline_name)
+
+            if existing_ep:
+                self._report_progress(f"Updating existing EP timeline: {ep_timeline_name}")
+                # For now, we'll rebuild the EP timeline
+                # TODO: Implement smarter update logic
+                ep_sequence = existing_ep
+                video_track = HieroTimeline.get_video_track(ep_sequence)
+            else:
+                self._report_progress(f"Creating new EP timeline: {ep_timeline_name}")
+                ep_sequence = HieroTimeline.create_sequence(ep_timeline_name, config.fps)
+                video_track = HieroTimeline.add_video_track(ep_sequence, "Video")
+
+            if not video_track:
+                result.errors.append("Failed to get/create video track for EP timeline")
+                return result
+
+            # Add sequence timelines in order
+            sorted_seqs = sort_sequences(list(sequence_timelines.keys()))
+            current_frame = 0
+
+            for seq in sorted_seqs:
+                seq_timeline = sequence_timelines.get(seq)
+                if not seq_timeline:
+                    continue
+
+                self._report_progress(f"  Adding {seq} to EP timeline at frame {current_frame}")
+
+                # Add sequence to EP timeline track
+                track_item = HieroTimeline.add_sequence_to_track(video_track, seq_timeline, current_frame)
+
+                if track_item:
+                    # Set metadata
+                    HieroTrackItem.set_metadata(track_item, "sequence", seq)
+
+                    # Get duration and advance position
+                    seq_duration = HieroTimeline.get_sequence_duration(seq_timeline)
+                    if seq_duration > 0:
+                        current_frame += seq_duration
+                    else:
+                        # Fallback: get from track item
+                        current_frame = track_item.timelineOut() + 1
+
+            result.success = True
+            result.sequence = ep_sequence
+            self._report_progress(f"EP timeline built with {len(sorted_seqs)} sequences")
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            result.errors.append(f"Failed to build EP timeline: {str(e)}")
+
+        return result
 
     def _get_bin_path_for_shot(self, shot_name: str) -> str:
         """
