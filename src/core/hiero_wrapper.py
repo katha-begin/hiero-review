@@ -357,13 +357,16 @@ class HieroClip:
         return clip.framerate().toFloat()
 
     @staticmethod
-    def find_clip_in_bin(bin_path: str, clip_name: str) -> Any:
+    def find_clip_in_bin(bin_path: str, shot_name: str) -> Any:
         """
-        Find a clip by name in a specific bin.
+        Find a clip by shot name in a specific bin.
+
+        Matches clips whose name starts with the shot name (e.g., shot_name="Ep01_sq0010_SH0010"
+        matches clip named "Ep01_sq0010_SH0010_v001").
 
         Args:
             bin_path: Bin path like "Ep01/sq0010"
-            clip_name: Name of the clip to find
+            shot_name: Shot name to find (e.g., "Ep01_sq0010_SH0010")
 
         Returns:
             Clip object if found, None otherwise
@@ -375,18 +378,37 @@ class HieroClip:
         if not project:
             return None
 
-        # Get the target bin
-        target_bin = HieroClip._get_or_create_bin(project, bin_path)
+        # Navigate to target bin (don't create if doesn't exist)
+        clips_bin = project.clipsBin()
+        path_parts = bin_path.replace("\\", "/").split("/")
+        current_bin = clips_bin
 
-        # Search for clip in bin
-        for item in target_bin.items():
+        for part in path_parts:
+            if not part:
+                continue
+            found_bin = None
+            for item in current_bin.items():
+                if hasattr(item, 'name') and item.name() == part and hasattr(item, 'items'):
+                    found_bin = item
+                    break
+            if found_bin:
+                current_bin = found_bin
+            else:
+                # Bin doesn't exist, so clip can't exist
+                return None
+
+        # Search for clip in bin - match by shot name prefix
+        for item in current_bin.items():
             # BinItem contains the actual clip
             if hasattr(item, 'activeItem'):
                 clip = item.activeItem()
-                if clip and hasattr(clip, 'name') and clip.name() == clip_name:
-                    return clip
-            elif hasattr(item, 'name') and item.name() == clip_name:
-                return item
+                if clip and hasattr(clip, 'name'):
+                    clip_name = clip.name()
+                    # Match if clip name starts with shot name
+                    # e.g., "Ep01_sq0010_SH0010_v001" starts with "Ep01_sq0010_SH0010"
+                    if clip_name.startswith(shot_name):
+                        print(f"[HieroReview] Found existing clip: {clip_name} for shot: {shot_name}")
+                        return clip
 
         return None
 
