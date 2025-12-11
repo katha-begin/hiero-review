@@ -32,34 +32,39 @@ except ImportError:
     HIERO_AVAILABLE = False
 
 from ..core import VersionManager, VersionUpdater, DepartmentSwitcher, ProjectScanner
+from ..core.lighting_scanner import LightingScanner
 
 
 class TrackItemContextMenu(QObject):
     """
     Context menu handler for timeline track items.
-    
+
     Provides right-click options for:
     - Version switching
     - Department switching
+    - Import lighting render
     - Show in explorer
     - Shot properties
     """
-    
+
     def __init__(self, scanner: Optional[ProjectScanner] = None):
         super().__init__()
         self._scanner = scanner
         self._version_updater: Optional[VersionUpdater] = None
         self._dept_switcher: Optional[DepartmentSwitcher] = None
-        
+        self._lighting_scanner: Optional[LightingScanner] = None
+
         if scanner:
             self._version_updater = VersionUpdater(scanner)
             self._dept_switcher = DepartmentSwitcher(scanner)
+            self._lighting_scanner = LightingScanner(scanner._project_root)
     
     def set_scanner(self, scanner: ProjectScanner) -> None:
         """Set the project scanner."""
         self._scanner = scanner
         self._version_updater = VersionUpdater(scanner)
         self._dept_switcher = DepartmentSwitcher(scanner)
+        self._lighting_scanner = LightingScanner(scanner._project_root)
     
     def build_menu(self, track_items: List[Any]) -> QMenu:
         """
@@ -102,17 +107,24 @@ class TrackItemContextMenu(QObject):
         latest_action.triggered.connect(lambda: self._go_latest_version(track_items))
         
         menu.addSeparator()
-        
+
+        # Import lighting render (single item only)
+        if single_item:
+            lighting_action = menu.addAction("Import Lighting Render...")
+            lighting_action.triggered.connect(lambda: self._show_lighting_import(item))
+
+        menu.addSeparator()
+
         # Show in explorer
         if single_item:
             explorer_action = menu.addAction("Show in Explorer")
             explorer_action.triggered.connect(lambda: self._show_in_explorer(item))
-        
+
         # Properties (single item only)
         if single_item:
             props_action = menu.addAction("Properties...")
             props_action.triggered.connect(lambda: self._show_properties(item))
-        
+
         return menu
     
     def _build_version_menu(self, menu: QMenu, items: List[Any]) -> None:
@@ -199,6 +211,93 @@ class TrackItemContextMenu(QObject):
             if versions:
                 latest = VersionManager.get_latest_version(versions)
                 self._version_updater.update_shot_version(item, latest)
+
+    def _show_lighting_import(self, item: Any) -> None:
+        """Show lighting import dialog for the selected item."""
+        if not self._lighting_scanner:
+            QMessageBox.warning(None, "Error", "Project scanner not initialized.")
+            return
+
+        try:
+            # Get shot info from track item
+            shot_info = self._lighting_scanner.get_shot_info_from_track_item(item)
+
+            if not shot_info:
+                QMessageBox.warning(
+                    None, "Error",
+                    "Could not determine shot information from selected item."
+                )
+                return
+
+            # Scan lighting department for this shot
+            scan_result = self._lighting_scanner.scan_shot_lighting(
+                shot_info['episode'],
+                shot_info['sequence'],
+                shot_info['shot']
+            )
+
+            if not scan_result.has_data:
+                QMessageBox.information(
+                    None, "No Lighting Renders",
+                    f"No lighting renders found for {scan_result.shot_name}."
+                )
+                return
+
+            # Show import dialog
+            from .lighting_import_dialog import LightingImportDialog
+
+            parent = hiero.ui.mainWindow() if HIERO_AVAILABLE else None
+            dialog = LightingImportDialog(scan_result, parent)
+
+            # Connect signal to handle import
+            dialog.import_requested.connect(
+                lambda passes: self._do_lighting_import(item, passes, scan_result)
+            )
+
+            dialog.exec_()
+
+        except Exception as e:
+            print(f"[ContextMenu] Error showing lighting import: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.warning(None, "Error", f"Failed to open lighting import: {e}")
+
+    def _do_lighting_import(self, source_item: Any, render_passes: list, scan_result) -> None:
+        """
+        Import selected lighting render passes to timeline2.
+
+        Args:
+            source_item: Original track item (for timecode reference)
+            render_passes: List of RenderPassInfo to import
+            scan_result: LightingScanResult for shot name
+        """
+        from .lighting_importer import LightingImporter
+
+        try:
+            importer = LightingImporter()
+            result = importer.import_to_timeline2(
+                source_item=source_item,
+                render_passes=render_passes,
+                shot_name=scan_result.shot_name,
+                department_name=scan_result.department
+            )
+
+            if result.success:
+                QMessageBox.information(
+                    None, "Import Complete",
+                    f"Successfully imported {result.clips_added} lighting render(s) to timeline2."
+                )
+            else:
+                QMessageBox.warning(
+                    None, "Import Failed",
+                    f"Import failed: {', '.join(result.errors)}"
+                )
+
+        except Exception as e:
+            print(f"[ContextMenu] Error importing lighting: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.warning(None, "Error", f"Failed to import lighting: {e}")
 
     def _show_in_explorer(self, item: Any) -> None:
         """Open file location in system file explorer."""

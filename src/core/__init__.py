@@ -14,6 +14,9 @@ from .version_updater import VersionUpdater, UpdateResult
 from .department_switcher import DepartmentSwitcher, SwitchResult
 from .audio_sync import AudioSynchronizer, SyncResult
 from .sequence_handler import SequenceHandler, SequenceInfo
+from .lighting_scanner import (
+    LightingScanner, LightingScanResult, VersionInfo, LayerInfo, RenderPassInfo
+)
 
 __all__ = [
     # Cache
@@ -47,5 +50,11 @@ __all__ = [
     # Sequence
     'SequenceHandler',
     'SequenceInfo',
+    # Lighting
+    'LightingScanner',
+    'LightingScanResult',
+    'VersionInfo',
+    'LayerInfo',
+    'RenderPassInfo',
 ]
 

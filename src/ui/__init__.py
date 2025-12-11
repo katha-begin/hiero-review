@@ -16,6 +16,8 @@ from .menu_integration import (
 )
 from .context_menu import TrackItemContextMenu, register_context_menu
 from .preferences_dialog import PreferencesDialog
+from .lighting_import_dialog import LightingImportDialog
+from .lighting_importer import LightingImporter, ImportResult
 
 __all__ = [
     # Main dialog
@@ -45,5 +47,9 @@ __all__ = [
     'register_context_menu',
     # Preferences
     'PreferencesDialog',
+    # Lighting import
+    'LightingImportDialog',
+    'LightingImporter',
+    'ImportResult',
 ]
 
